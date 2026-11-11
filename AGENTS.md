@@ -24,10 +24,11 @@ without a page, for measurement.
 - **The world supplies problems, never answers.** The reward is the body's forward progress
   along its own heading, capped. No target pose, no phase, no "move leg 3 now". Shaping terms
   (lateral drift, yaw, posture) are not added without a measured reason and a README note.
-  Two such terms are in: every foot short of four planted through the moment takes a small
-  amount (`STANCE_PAY` in `spider/life.py`), and so does every radian turned (`YAW_PAY`).
-  Both are labelled as shaping, their readings are in the README, and `--stance-pay 0
-  --yaw-pay 0` in the nursery restores progress-only pay for comparison.
+  Two such terms exist in `spider/life.py`: every foot short of four planted through the
+  moment takes `STANCE_PAY` (on by default, 0.1), and every radian turned takes `YAW_PAY`
+  (off by default: no measured dose straightened the course without stopping the walk).
+  Both are labelled as shaping, their readings are in the README, and `--stance-pay` and
+  `--yaw-pay` in the nursery, or the same names in the server's environment, set them.
 - **Every outcome is delivered exactly once.** `Life.reward` is the last executed command's
   outcome not yet delivered. A refusal keeps it in the policy's `owed`; a policy switch moves it
   to the brain's `owed`; a save writes it to the sidecar; a load delivers it. Keep the tests in

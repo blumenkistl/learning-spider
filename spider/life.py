@@ -33,7 +33,8 @@ PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full str
 PROGRESS_CAP = 0.5      # the Robot Arena's cap, under the dopamine cap of 1.0
 STANCE_FLOOR = 4        # feet the world wants on the ground through every moment
 STANCE_PAY = 0.1        # taken per foot short of the floor: a hint, shaping, not an outcome (0.02 was ignored)
-YAW_PAY = 0.1           # taken per radian turned in the moment: the hint to go straight, shaping too
+YAW_PAY = 0.0           # taken per radian turned in the moment: the hint to go straight, off (README: ignored at
+                        # 0.1 and 1 a radian, obeyed at 5 by standing still); --yaw-pay / YAW_PAY switch it on
 BLOCK = 100             # moments per statistics block
 BLOCKS_KEPT = 60
 FORMAT = "learning-spider/1"

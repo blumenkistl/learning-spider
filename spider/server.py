@@ -19,7 +19,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .life import Life
+from .life import STANCE_PAY, YAW_PAY, Life
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 FRAME_SECONDS = 1.0 / 30.0
@@ -98,6 +98,8 @@ def life_from_env() -> Life:
         pace=float(os.environ.get("PACE", "20")),
         runs=runs,
         backend=os.environ.get("BACKEND") or None,
+        stance_pay=float(os.environ.get("STANCE_PAY", STANCE_PAY)),
+        yaw_pay=float(os.environ.get("YAW_PAY", YAW_PAY)),
     )
     if policy == "brain" and life.brain_file.exists():
         report = life.load()

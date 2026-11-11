@@ -36,6 +36,10 @@ The server autosaves every five minutes and at shutdown, and continues a saved l
 next start, with the world's state and the outcome the brain had not yet received. Stopping
 and starting the server is not a new spider. Delete `runs/` for a newborn.
 
+Environment variables for the server: `PORT` (8080), `POLICY` (`brain`), `SEED` (0), `PACE`
+(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0.1) and `YAW_PAY` (0), the reward's
+two hints described under [the reward](#the-reward-spiderlifepy).
+
 For development against a checkout of the library: `.venv/bin/python -m pip install -e ../cadence`.
 
 ## What it demonstrates
@@ -98,20 +102,22 @@ it touches the ground: 152 inputs in `[0, 1]`. No constant drive input, no targe
 
 ### The reward (`spider/life.py`)
 
-`reward = clip(40 × progress, 0, 0.5) − 0.1 × max(0, 4 − stance) − 0.1 × |turn|`, clipped
-to ±0.5, where progress is the metres moved this moment along the heading held at the start of
-the moment, stance is the number of feet planted through the moment (at its start and its end)
-and turn is the radians the heading changed. Backward, sideways and standing still pay nothing.
-`done` is never true.
+`reward = clip(40 × progress, 0, 0.5) − 0.1 × max(0, 4 − stance) − yaw_pay × |turn|`,
+clipped to ±0.5, where progress is the metres moved this moment along the heading held at the
+start of the moment, stance is the number of feet planted through the moment (at its start and
+its end) and turn is the radians the heading changed. Backward, sideways and standing still pay
+nothing. `done` is never true.
 
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
 is paying for a posture and a course, not for an outcome. The stance term was added after the
 learner under progress alone walked on ever fewer feet (three to one on average over 30,000
 moments) and stalled once calm. At 0.02 a foot the learner ignored it; at 0.1 it keeps four
-feet down and walks less far. The yaw term was added because progress along the body's own
-heading pays a circle as well as a straight line. Four planted feet and a straight course cost
-nothing, so the only positive reward is still forward progress. The readings for each are below.
-`--stance-pay 0 --yaw-pay 0` in the nursery restores the progress-only law.
+feet down and walks less far. The yaw term exists because progress along the body's own
+heading pays a circle as well as a straight line, but it ships switched off (`yaw_pay = 0`):
+at 0.1 and 1 a radian the learner ignored it, and at 5 it obeyed by standing still. Four
+planted feet cost nothing, so the only positive reward is still forward progress. The readings
+for each are below. `--stance-pay` and `--yaw-pay` in the nursery, or `STANCE_PAY` and
+`YAW_PAY` in the server's environment, set the doses; both at 0 is the progress-only law.
 
 The first law paid backward progress negatively (`clip(…, −0.5, 0.5)`). Under it the learning
 brain lifted every foot within 10,000 moments and stood still, since a push could pay negative
@@ -154,7 +160,8 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 3000 --policy frozen --seed 0            # a newborn, never learns
 .venv/bin/python -m spider.nursery --moments 3000 --policy frozen --brain runs/s0.npz # the raised brain, frozen
 .venv/bin/python -m spider.nursery --moments 3000 --policy brain --brain runs/s0.npz  # continue the saved life
-.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --stance-pay 0 --yaw-pay 0  # progress only
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --stance-pay 0  # progress only
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --yaw-pay 5     # charge turning too
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
@@ -252,7 +259,33 @@ to six feet and move +0.18, +0.03 and +0.06 m.
 halves the distance walked. The project's rule stands: a shaped term buys the posture it pays
 for, and the brain pays for it with the outcome.
 
-What a next step would measure, each against the same controls: a continuation of a four-foot
+**The yaw term.** The nursery's `turned` column is the unsigned sum of the radians the heading
+changed each moment, so it counts the jitter of shuffling feet as well as circling. Every policy
+turns a great deal by that measure: random turns 600, 510 and 580 radians in 30,000 moments,
+the no-learning twin 460, 700 and 360, the brain under the stance term alone 360, 250 and 450,
+about 0.013 radians a moment. The same comparison with the yaw charge added to the shipped
+stance term, 30,000 moments, forward metres with the radians turned (first 5000 → last 5000):
+
+| 30,000 moments | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| brain, no yaw charge | +0.60 (61 → 50) | +0.69 (88 → 27) | +1.02 (100 → 77) |
+| brain, 0.1 a radian | +0.68 (75 → 82) | +0.67 (99 → 89) | +1.25 (77 → 63) |
+| brain, 1 a radian | +0.85 (70 → 87) | +0.83 (94 → 85) | +1.26 (62 → 60) |
+| brain, 5 a radian | +0.07 (54 → 55) | +0.49 (104 → 18) | +0.88 (68 → 35) |
+| actor rates 0, 5 a radian | -0.09 (104 → 110) | +2.48 (116 → 88) | +0.85 (68 → 72) |
+
+At 0.1 a radian the charge costs the brain about 0.001 a moment, a hundredth of the stance
+term, and it is ignored: turning and distance are the same as without it. At 1 a radian it is
+still ignored. At 5 a radian the brain obeys in seeds 1 and 2, turning a third as much in its
+last 5000 moments as in its first, and it obeys by stopping: those seeds walk +0.28 and +0.49 m
+in their first 5000 moments and +0.01 and +0.06 m in their last. Standing still turns nothing,
+and under this charge it is the cheapest course. The term therefore ships switched off. A
+charge on the unsigned turn cannot separate a circle from the jitter every gait has; a next
+version would charge the net heading drift over a window of moments, which a straight jittering
+gait does not pay.
+
+What a next step would measure, each against the same controls: a course hint on the net
+heading drift over a window rather than the unsigned turn; a continuation of a four-foot
 brain, for the calm stall; a way out of that stall
 (`--gene arousal.need=` or a floor on the arousal level, read under `live`); a lower actor eta
 or a shorter eligibility (`--gene lam=`); module sizes (`--gene modules=48,24`); and the

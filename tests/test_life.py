@@ -57,12 +57,12 @@ def test_feet_short_of_four_take_pay():
     assert pay(-1.0, 0) == pytest.approx(-0.4)           # backward still pays zero progress
 
 
-def test_turning_takes_pay():
-    assert pay(0.0, 4, turn=0.0) == 0.0
-    assert pay(0.0, 4, turn=0.1) == pytest.approx(-0.01) and pay(0.0, 4, turn=-0.1) == pytest.approx(-0.01)
-    assert pay(0.01, 4, turn=0.5) == pytest.approx(0.4 - 0.05)
-    assert pay(0.0, 4, turn=0.5, yaw_pay=0.0) == 0.0
-    assert pay(0.0, 0, turn=3.0) == -0.5                 # the cap holds both hints
+def test_turning_takes_pay_when_switched_on():
+    assert pay(0.0, 4, turn=0.5) == 0.0                  # off by default
+    assert pay(0.0, 4, turn=0.1, yaw_pay=0.1) == pytest.approx(-0.01)
+    assert pay(0.0, 4, turn=-0.1, yaw_pay=0.1) == pytest.approx(-0.01)
+    assert pay(0.01, 4, turn=0.5, yaw_pay=0.1) == pytest.approx(0.4 - 0.05)
+    assert pay(0.0, 0, turn=3.0, yaw_pay=5.0) == -0.5    # the cap holds both hints
 
 
 def test_blocks_close_every_hundred_moments(tmp_path):
