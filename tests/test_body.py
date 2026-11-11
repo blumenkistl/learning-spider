@@ -176,3 +176,4 @@ def test_pressing_leg_touches_the_ground_where_the_tibia_crosses_it():
     reach = np.hypot(foot[:, 0] - knee[:, 0], foot[:, 1] - knee[:, 1])
     assert np.all(reach < reach_rest)                             # the contact point moves in under the knee
     assert Spider(joints=pressed).stance_count == LEGS
+

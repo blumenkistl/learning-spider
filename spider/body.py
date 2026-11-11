@@ -24,6 +24,7 @@ import numpy as np
 DT = 0.05                               # seconds per moment (20 Hz)
 LEGS = 8
 JOINTS = 2 * LEGS
+PER_SIDE = LEGS // 2
 
 BODY = (0.15, 0.10, 0.06)               # ellipsoid semi-axes (x, y, z)
 HEAD_RADIUS = 0.06
@@ -31,14 +32,18 @@ HEAD_X = 0.19                           # head sphere centre, body frame
 HEIGHT = 0.10                           # body centre above ground when standing
 SAG = 0.03                              # visual drop when fewer than STANCE_MIN feet are planted
 
-HIP_X = (0.12, 0.04, -0.04, -0.12)      # legs 0-3 left front->back, 4-7 right front->back
+HIP_X = (0.12, 0.04, -0.04, -0.12)
+#                                       # left legs front->back, then right legs front->back
 HIP_Y = 0.10
-FEMUR = 0.10                            # hip -> knee
+HIP_SPLAY = (0.3, 0.1, -0.1, -0.3)
+#                                       # each leg's resting yaw: front legs point forward, rear legs back,
+#                                       # as a tarantula stands (all legs straight out until that body)
+FEMUR = 0.16                            # hip -> knee (0.10 until the tarantula body; the legs were stubby)
 FEMUR_RISE = 0.35                       # the femur's fixed elevation above horizontal
-TIBIA = 0.14                            # knee -> foot
+TIBIA = 0.20                            # knee -> foot (0.14 before)
 TIBIA_REST = math.acos((HEIGHT + FEMUR * math.sin(FEMUR_RISE)) / TIBIA)   # foot on the ground at knee 0
 
-HIP_RANGE = (-0.6, 0.6)                 # swing: 0 straight out, + forward
+HIP_RANGE = (-0.6, 0.6)                 # swing about the leg's resting yaw, + forward
 KNEE_RANGE = (-0.5, 1.0)                # lift: 0 foot on the ground, below 0 the leg presses into it
 HIP_RATE = 1.5                          # rad/s per commanded step
 KNEE_RATE = 2.5
@@ -49,8 +54,9 @@ GRIP = 10.0                             # 1/s: how fast the body takes the speed
 SLIDE = 6.0                             # 1/s: velocity decay with too few feet planted
 ARENA_RADIUS = 5.0                      # beyond this the spider is recentred (not a reset)
 
-SIDE = np.array([1.0] * 4 + [-1.0] * 4)             # +1 left, -1 right
-HIPS = np.array([(HIP_X[i % 4], SIDE[i] * HIP_Y, 0.0) for i in range(LEGS)])
+SIDE = np.array([1.0] * PER_SIDE + [-1.0] * PER_SIDE)   # +1 left, -1 right
+HIPS = np.array([(HIP_X[i % PER_SIDE], SIDE[i] * HIP_Y, 0.0) for i in range(LEGS)])
+SPLAY = np.array([HIP_SPLAY[i % PER_SIDE] for i in range(LEGS)])
 RATES = np.array([HIP_RATE, KNEE_RATE])
 LOW = np.array([HIP_RANGE[0], KNEE_RANGE[0]])
 HIGH = np.array([HIP_RANGE[1], KNEE_RANGE[1]])
@@ -60,7 +66,7 @@ def kinematics(joints: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """Knee and foot positions in the body frame, ``(8, 3)`` each, for ``joints`` ``(8, 2)``
     of hip swing and knee lift. The body frame's origin is the body centre at ``HEIGHT``;
     a foot on the ground has ``z == -HEIGHT``."""
-    theta = joints[:, 0]
+    theta = SPLAY + joints[:, 0]
     beta = TIBIA_REST + joints[:, 1]
     d = np.stack([np.sin(theta), SIDE * np.cos(theta), np.zeros(LEGS)], axis=1)
     up = np.array([0.0, 0.0, 1.0])

@@ -5,7 +5,8 @@ WebSocket at the life's pace (at most 30 frames a second) and takes controls as 
     PORT=8090 POLICY=random python -m spider
 
 Environment: HOST (127.0.0.1), PORT (8080), POLICY (brain), SEED (0), PACE (20 moments/s),
-BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs), AUTOSAVE_MINUTES (5).
+BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs), AUTOSAVE_MINUTES (5),
+STANCE_PAY (0.1), YAW_PAY (0) and PROGRESS_WINDOW (1), the reward's settings.
 A saved life in RUNS is continued; shutdown saves it.
 """
 
@@ -19,7 +20,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .life import STANCE_PAY, YAW_PAY, Life
+from .life import PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 FRAME_SECONDS = 1.0 / 30.0
@@ -100,6 +101,7 @@ def life_from_env() -> Life:
         backend=os.environ.get("BACKEND") or None,
         stance_pay=float(os.environ.get("STANCE_PAY", STANCE_PAY)),
         yaw_pay=float(os.environ.get("YAW_PAY", YAW_PAY)),
+        window=int(os.environ.get("PROGRESS_WINDOW", PROGRESS_WINDOW)),
     )
     if policy == "brain" and life.brain_file.exists():
         report = life.load()

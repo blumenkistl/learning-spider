@@ -25,14 +25,17 @@ from typing import Any
 
 import numpy as np
 
-from .body import DT, HEIGHT, JOINTS, LEGS, Spider
+from .body import DT, HEIGHT, HIPS, JOINTS, LEGS, Spider
 from .brain import FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, make_policy
 from .senses import DEFAULT as DEFAULT_SENSES, Senses
 
 PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full stroke speed of 0.2 m/s
 PROGRESS_CAP = 0.5      # the Robot Arena's cap, under the dopamine cap of 1.0
-STANCE_FLOOR = 4        # feet the world wants on the ground through every moment
+STANCE_FLOOR = LEGS // 2   # feet the world wants on the ground through every moment: half of them
 STANCE_PAY = 0.1        # taken per foot short of the floor: a hint, shaping, not an outcome (0.02 was ignored)
+PROGRESS_WINDOW = 1     # moments the progress term is averaged over: 1 pays each moment's own progress;
+                        # a window pays the mean over the last N, which a sway that nets nothing cannot earn
+                        # (README, "The rocking"); --window / PROGRESS_WINDOW set it
 YAW_PAY = 0.0           # taken per radian turned in the moment: the hint to go straight, off (README: ignored at
                         # 0.1 and 1 a radian, obeyed at 5 by standing still); --yaw-pay / YAW_PAY switch it on
 BLOCK = 100             # moments per statistics block
@@ -86,10 +89,15 @@ class Life:
         name: str = "spider",
         stance_pay: float = STANCE_PAY,
         yaw_pay: float = YAW_PAY,
+        window: int = PROGRESS_WINDOW,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self.stance_pay = float(stance_pay)     # 0 switches the posture hint off
         self.yaw_pay = float(yaw_pay)           # 0 switches the course hint off
+        if int(window) < 1:
+            raise ValueError(f"window must be at least 1 moment, not {window}")
+        self.window = int(window)
+        self._progress: deque[float] = deque(maxlen=self.window)   # the last window moments' progress
         self.seed = int(seed)
         self.genes = genes
         self.backend = backend
@@ -127,7 +135,9 @@ class Life:
             self.reward = None
             before = (self.spider.x, self.spider.y)
             outcome = self.spider.step(reading["commands"])
-            self.reward = pay(outcome["progress"], outcome["stance"], self.stance_pay,
+            self._progress.append(outcome["progress"])
+            paid = sum(self._progress) / self.window    # short of a full window the missing moments count as zero
+            self.reward = pay(paid, outcome["stance"], self.stance_pay,
                               outcome["turn"], self.yaw_pay)
             self.moments += 1
             self.distance_forward += outcome["progress"]
@@ -326,6 +336,7 @@ class Life:
                 "turned": self.turned,
                 "recentres": self.recentres,
                 "world": self.spider.state_dict(),
+                "progress_window": list(self._progress),
                 "blocks": list(self.blocks),
                 "saved_at": time.time(),
             }
@@ -355,6 +366,7 @@ class Life:
                 self.turned = float(state.get("turned", 0.0))
                 self.recentres = int(state.get("recentres", 0))
                 self.spider = Spider.restore(state["world"])
+                self._progress = deque([float(v) for v in state.get("progress_window", [])][-self.window:], maxlen=self.window)
                 self.blocks = deque(state.get("blocks", []), maxlen=BLOCKS_KEPT)
                 if state.get("cadence") != CADENCE_VERSION:
                     self.notes.append(f"saved with cadence {state.get('cadence')}, running {CADENCE_VERSION}")
@@ -388,9 +400,11 @@ class Life:
             "input_names": self.senses.input_names(),
             "joints": JOINTS,
             "legs": LEGS,
+            "hips": HIPS.tolist(),
             "height": HEIGHT,
             "reward": {"pay_per_metre": PROGRESS_PAY, "cap": PROGRESS_CAP,
-                       "stance_floor": STANCE_FLOOR, "stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay},
+                       "stance_floor": STANCE_FLOOR, "stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay,
+                       "window": self.window},
             "brain": brain.describe() if brain is not None else None,
             "control": self.policy.describe() if self.policy is not brain else None,
             "runs": str(self.runs),

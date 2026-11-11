@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .life import BLOCK, STANCE_PAY, YAW_PAY, Life
+from .life import BLOCK, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
 from .senses import Senses
 
 
@@ -75,7 +75,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 genes=genes, backend=args.backend, senses=senses,
                 brain_path=None if continuing else args.brain,
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
-                yaw_pay=args.yaw_pay)
+                yaw_pay=args.yaw_pay, window=args.window)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -131,6 +131,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "genes": genes or {},
         "stance_pay": args.stance_pay,
         "yaw_pay": args.yaw_pay,
+        "window": args.window,
         "per": senses.per,
         "blocks": rows,
     }
@@ -151,9 +152,11 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help="name=value, e.g. modules=48,24 or arousal.need=0 (repeatable)")
     parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
     parser.add_argument("--stance-pay", type=float, default=STANCE_PAY,
-                        help=f"reward taken per foot short of four planted (default {STANCE_PAY}; 0 = off)")
+                        help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
     parser.add_argument("--yaw-pay", type=float, default=YAW_PAY,
                         help=f"reward taken per radian turned in a moment (default {YAW_PAY}; 0 = off)")
+    parser.add_argument("--window", type=int, default=PROGRESS_WINDOW,
+                        help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--backend", default=None, help="auto (default), cpu, torch or torch:<device>")
     parser.add_argument("--json", type=Path, default=None, help="write the summary here")
     parser.add_argument("--quiet", action="store_true")

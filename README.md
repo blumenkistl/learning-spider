@@ -37,8 +37,9 @@ next start, with the world's state and the outcome the brain had not yet receive
 and starting the server is not a new spider. Delete `runs/` for a newborn.
 
 Environment variables for the server: `PORT` (8080), `POLICY` (`brain`), `SEED` (0), `PACE`
-(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0.1) and `YAW_PAY` (0), the reward's
-two hints described under [the reward](#the-reward-spiderlifepy).
+(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0.1), `YAW_PAY` (0) and
+`PROGRESS_WINDOW` (1), the reward's two hints and its window described under
+[the reward](#the-reward-spiderlifepy).
 
 For development against a checkout of the library: `.venv/bin/python -m pip install -e ../cadence`.
 
@@ -78,9 +79,17 @@ body by what its planted feet did, and keeps the resulting reward for the next m
 
 ### The body (`spider/body.py`)
 
-Ellipsoid body (semi-axes 0.15 × 0.10 × 0.06 m) at a fixed standing height of 0.10 m, a head
-sphere in front, eight legs: hip swing in ±0.6 rad at 1.5 rad/s, knee lift in −0.5 to 1 rad at
-2.5 rad/s, femur 0.10 m at a fixed rise, tibia 0.14 m. At knee 0 the foot is on the ground;
+Ellipsoid body (semi-axes 0.15 × 0.10 × 0.06 m) at a fixed standing height of 0.10 m, eight
+legs: hip swing in ±0.6 rad at 1.5 rad/s, knee lift in −0.5 to 1 rad at 2.5 rad/s, femur 0.16 m
+at a fixed rise, tibia 0.20 m, so a foot reaches 0.28 m out from its hip. Each leg swings
+about its own resting yaw (`HIP_SPLAY`: the front pair 0.3 rad forward, the second pair 0.1,
+the third 0.1 back, the rear pair 0.3 back), so the spider stands as a tarantula does rather
+than as a star; a splayed leg's stroke pushes forward by the cosine of its yaw, 0.96 for
+the front and rear pairs. A splay of 0.6 rad was measured first and cost the brain its
+walking (the readings below); 0.3 is the measured compromise. The page draws that
+body as a tarantula (front part, abdomen, coxae, bristles); only the hips, knees and feet are the
+world's. Until the tarantula body the femur was 0.10 m and the tibia 0.14 m; the readings below
+say which legs they were measured with. At knee 0 the foot is on the ground;
 below 0 the leg presses into it and touches it where the tibia crosses the ground plane, so a
 third of the knee's range keeps the foot planted. With at least two feet planted at both
 moments, the body's velocity relaxes toward the negated rigid two-dimensional fit (translation
@@ -106,7 +115,10 @@ it touches the ground: 152 inputs in `[0, 1]`. No constant drive input, no targe
 clipped to ±0.5, where progress is the metres moved this moment along the heading held at the
 start of the moment, stance is the number of feet planted through the moment (at its start and
 its end) and turn is the radians the heading changed. Backward, sideways and standing still pay
-nothing. `done` is never true.
+nothing. `done` is never true. `--window N` (`PROGRESS_WINDOW` for the server, default 1) replaces
+progress with the mean progress of the last N moments, so a sway that moves the body forward and
+back earns nothing over the window; the window is saved with the life. Its readings are under
+"The windowed reward" below; the default stays 1.
 
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
 is paying for a posture and a course, not for an outcome. The stance term was added after the
@@ -162,6 +174,7 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 3000 --policy brain --brain runs/s0.npz  # continue the saved life
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --stance-pay 0  # progress only
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --yaw-pay 5     # charge turning too
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --window 20      # pay the mean progress of 20 moments
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
@@ -171,9 +184,11 @@ summary (`--json path` writes it).
 ### Readings
 
 All readings are from this machine (one CPU core per run, NumPy float64), 2026-11-11, with
-the world and reward law this README describes. One run per seed; the random policy and the
-frozen newborn do not read the reward, so their rows come from the same world under the
-earlier symmetric law. No run refused a moment.
+the world and reward law this README describes. The tables up to the yaw term were measured
+with the earlier short legs (femur 0.10 m, tibia 0.14 m); the long legs have their own table
+at the end. One run per seed; the random policy and the frozen newborn do not read the reward,
+so their rows come from the same world under the earlier symmetric law. No run refused a
+moment.
 
 Forward metres over 3000 moments (150 s of the body's time):
 
@@ -213,9 +228,10 @@ not in its greedy answer.
 Continuing seed 0's saved brain for 6000 more moments (30,000 to 36,000) moved +0.096 m in
 the first 1000 and 0.000 m after that. Its arousal fell to routine in that first block and
 stayed there: a calm brain answers greedily, learns nothing, and its greedy answer here is a
-posture that does not move; a reward of zero is then no surprise. The `live` law has no
-boredom, so nothing wakes it. That is a reading about this founder's arousal genes meeting a
-reward that is zero at rest, and the first open question for this project.
+posture that does not move. That reading took the stalled brain's reward to be zero; a later
+inspection of a stalled brain ("The rocking", below) found it rocking in place for a steady
+income instead, and this run's income was not inspected. Either way the `live` law has no
+boredom, so nothing wakes a brain whose income meets its need.
 
 **Reading:** under the forward-only reward, reward learning produces forward motion that the
 sampling of the same brain without learning, random commands and greedy frozen copies do not
@@ -284,12 +300,150 @@ charge on the unsigned turn cannot separate a circle from the jitter every gait 
 version would charge the net heading drift over a window of moments, which a straight jittering
 gait does not pay.
 
-What a next step would measure, each against the same controls: a course hint on the net
-heading drift over a window rather than the unsigned turn; a continuation of a four-foot
-brain, for the calm stall; a way out of that stall
-(`--gene arousal.need=` or a floor on the arousal level, read under `live`); a lower actor eta
-or a shorter eligibility (`--gene lam=`); module sizes (`--gene modules=48,24`); and the
-population code's resolution (`--per 16`).
+**The long legs.** The tarantula body lengthened the femur from 0.10 to 0.16 m and the tibia
+from 0.14 to 0.20 m, so a stroke of the same hip angle carries the body almost twice as far.
+Fresh brains in that world, the shipped reward (stance 0.1, yaw off), 30,000 moments, against
+random:
+
+| 30,000 moments, forward metres (planted feet, first 5000 → last 5000) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| brain, long legs | +2.352 (3.8 → 1.9) | +3.205 (1.4 → 1.6) | +2.410 (3.3 → 2.4) |
+| random, long legs | -0.705 (2.8 → 2.9) | +0.470 (3.2 → 3.4) | -0.149 (3.0 → 3.1) |
+
+The learning brain walks two to three times as far as with the short legs under the same
+stance term, and it does so by giving up feet again: it ends with two planted, not four. With
+the long legs a stroke earns more than a missing foot costs, so the 0.1 dose that held four
+feet down on the short legs no longer does; a four-foot posture on this body would need a
+higher dose, which has not been measured. Random turns 720–830 radians in these runs, the brain
+460–680. 3.5 ms a moment on the CPU. A brain saved with the short legs loads into this body,
+since its senses are joint angles and not positions, but its habits were learned with short
+legs; the readings above are from fresh brains.
+
+**Four legs.** Is the eight-legged body too much for this brain? A four-legged comparison
+body (two legs a side, eight joints, eight motor slots, 80 inputs; the stance floor half the
+feet, two) was built as a `SPIDER_LEGS` option, measured against the eight-legged one in the
+same world (long legs, no splay), fresh brains, 30,000 moments, and removed again after the
+reading below; this table is its receipt. The no-learning twin is the same brain with every learning rate
+zero (`--gene eta=0 --gene eta_bias=0 --gene eta_critic=0`): it samples its motors at the
+same temperature and never changes. "Last 5000" is the distance in the final 5000 moments.
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| 4 legs, brain, progress only | +6.759 (+1.17; 1.2 → 2.0) | +0.715 (0.00; 1.2 → 2.0) | +0.095 (0.00; 1.7 → 2.0) |
+| 4 legs, brain, stance 0.1 (floor two feet) | +0.339 (+0.02; 1.6 → 2.0) | +11.789 (+2.38; 1.6 → 1.9) | +0.867 (0.00; 1.0 → 2.0) |
+| 4 legs, no-learning twin, progress only | +3.353 (+1.52; 0.9 → 1.8) | +4.654 (+1.16; 1.8 → 1.8) | +0.608 (0.00; 1.9 → 3.0) |
+| 4 legs, random | -0.537 (1.4 → 1.6) | -0.850 (1.7 → 1.6) | +0.040 (1.6 → 1.7) |
+| 8 legs, brain, progress only | +34.074 (+6.49; 3.4 → 3.4) | +0.817 (0.00; 0.8 → 2.0) | +1.304 (0.00; 3.2 → 3.1) |
+| 8 legs, random | -0.705 (2.8 → 2.9) | +0.470 (3.2 → 3.4) | -0.149 (3.0 → 3.1) |
+
+The reading is that four legs do not help. The four-legged learner's spread, 0.1 to 11.8 m,
+is the same lottery as the eight-legged one, and in four of its six runs it is beaten by its
+own no-learning twin, which walked 3.4 and 4.7 m in two seeds by sampling alone; the twin's
+success is the body being easy to move by chance, not learning. What ends learning in both
+bodies is the calm stall: in seven of the nine learning runs the last 5000 moments moved
+nothing, the aroused share was zero and the planted count sat at exactly 2.00. "The rocking"
+below says what that pose is doing. The one run that kept moving on
+eight legs, seed 0 with progress only, walked 34 m and was still accelerating (6.5 m in its
+last 5000, three to four feet down without a stance term): the best reading in this project
+and ten times anything before it, from one seed of three. The eight-legged body is not the
+limit; the stall is. 2 ms a moment for the four-legged brain, 2–3 ms for the eight-legged one.
+
+**The splayed legs.** The resting yaw (`HIP_SPLAY`, front legs forward, rear legs back) was
+measured at two sizes right after it was added, eight legs, fresh brains, 30,000 moments,
+against the same runs on the star-shaped body above. "0.6" splays the front and rear pairs
+0.6 rad and the middle pairs 0.2; "0.3" splays them 0.3 and 0.1:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| brain, progress only, splay 0.6 | +0.125 (+0.01; 4.0 → 4.0) | +0.161 (0.00; 2.5 → 2.5) | +0.627 (0.00; 3.2 → 3.0) |
+| brain, progress only, splay 0.3 | +0.503 (0.00; 3.1 → 3.0) | +0.044 (0.00; 2.5 → 2.5) | +0.709 (0.00; 2.3 → 2.0) |
+| brain, progress only, star (table above) | +34.074 | +0.817 | +1.304 |
+| brain, stance 0.1, splay 0.6 | +0.492 (+0.01; 3.7 → 3.8) | +1.049 (+0.09; 1.7 → 3.4) | +1.341 (+0.27; 3.3 → 1.9) |
+| brain, stance 0.1, splay 0.3 | +2.736 (+0.23; 3.4 → 2.9) | +3.339 (+0.59; 2.3 → 1.4) | +1.938 (+0.20; 2.8 → 2.9) |
+| brain, stance 0.1, star (long legs table) | +2.352 | +3.205 | +2.410 |
+| random, splay 0.6 | -0.394 (2.8 → 2.9) | -0.151 (3.2 → 3.4) | -0.446 (3.0 → 3.1) |
+| random, splay 0.3 | -0.583 (2.8 → 2.9) | +0.172 (3.2 → 3.4) | -0.290 (3.0 → 3.1) |
+
+At 0.6 all six learning runs fall below the matching run on the star body, by two to five
+times under the stance term; random is unchanged. The plausible mechanism is geometric: a
+splayed leg's stroke pushes partly sideways and partly into a turn, and those parts cancel
+only when the planted set is mirrored, so the same uncoordinated strokes that moved the star
+body forward now move the splayed one sideways or round. At 0.3 the stance-term runs are back
+at the star body's level (1.9–3.3 m against 2.4–3.2) and the progress-only runs match the
+star body's two ordinary seeds (0.5–0.7 against 0.8–1.3); the star body's 34 m seed has no
+counterpart in either splay, and one seed cannot say whether that is the splay or the
+lottery. The progress-only runs stall calm on every body; the stance runs stay aroused the
+whole 30,000 moments (aroused share 1.00). Three seeds each, so readings. 0.3 is the body's
+default; the readings before this paragraph were taken on the star body. The star body is
+every `HIP_SPLAY` entry at zero.
+
+**The rocking.** A stalled brain was inspected (seed 1, progress only, splay 0.3, replayed
+to 16,000 moments). It is not resting: in its last 200 moments every moment's progress has
+the opposite sign of the one before, with equal size, so the net is zero while one knee
+toggles between pressing and resting each moment. Pressing moves the point where the tibia
+meets the ground, the rigid fit reads that as the foot moving, and the body sways. The
+forward half of each sway pays forty times its progress and the backward half pays nothing,
+so the sway earns 0.058 a moment with no displacement. That income is above the founder need
+of 0.05, the want is 0.01, and the brain stays calm. The calm stall is a reward exploit of
+the forward-only law, not an idle brain; it is what the earlier "stalled" rows most likely
+hold too, though only this one was inspected.
+
+**A raised need.** The founder need is 0.05 reward a moment. Raising it keeps a rocking brain
+wanting, since rocking pays less than the need. Eight legs, splay 0.3, fresh brains, 30,000
+moments; "r/moment" is the reward over the last 5000:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| progress only, need 0.05 (table above) | +0.503 (0.00; 3.1 → 3.0) | +0.044 (0.00; 2.5 → 2.5) | +0.709 (0.00; 2.3 → 2.0) |
+| progress only, need 0.1 | +1.207 (+0.23; 2.5 → 1.0; 0.016) | +1.355 (+0.07; 1.3 → 1.0; 0.001) | +2.203 (+0.11; 1.7 → 0.7; 0.010) |
+| progress only, need 0.2 | +2.332 (−0.01; 2.2 → 0.5; 0.003) | +1.251 (0.00; 0.7 → 0.3; 0.000) | +1.687 (+0.16; 2.2 → 0.5; 0.004) |
+| stance 0.1, need 0.05 (table above) | +2.736 (+0.23; 3.4 → 2.9) | +3.339 (+0.59; 2.3 → 1.4) | +1.938 (+0.20; 2.8 → 2.9) |
+| stance 0.1, need 0.1 | +1.292 (+0.09; 3.3 → 3.0; −0.081) | +1.778 (+0.07; 2.3 → 2.6; −0.121) | +1.858 (+0.03; 3.6 → 3.2; −0.064) |
+
+The raised need does what it says: every run stays aroused for all 30,000 moments, the
+rocking income is gone (0.00–0.016 a moment at the end) and the progress-only distance
+doubles or triples. It does not produce a walker. Under permanent arousal the brain drifts
+to lifting its feet: it ends on one planted foot at need 0.1 and on half a foot at 0.2, where
+nothing pushes, with the last 5000 moments moving 0 to 0.2 m. Under the stance term the
+raised need walks less than the founder (1.3–1.9 m against 1.9–3.3). One zero-progress end
+state, calm rocking, is exchanged for another, aroused standing on air. 4–5 ms a moment,
+since every moment learns. The need stays at 0.05; the reward law is the open question, and
+the next measurement is a law that pays net displacement over a window, which rocking cannot
+earn and standing cannot either. That measurement follows.
+
+**The windowed reward.** `--window N` pays the mean progress of the last N moments instead
+of this moment's, so a sway of equal halves earns nothing once the window holds a whole
+cycle (a test, `test_windowed_progress_pays_a_walk_and_not_a_sway`, checks that a steady walk
+earns the same and a sway earns nothing). Eight legs, splay 0.3, fresh brains, 30,000 moments;
+"aroused" is the share of aroused moments over the last 5000:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| progress only, window 1 (table above) | +0.503 (0.00; 3.1 → 3.0; 0.00) | +0.044 (0.00; 2.5 → 2.5; 0.00) | +0.709 (0.00; 2.3 → 2.0; 0.00) |
+| progress only, window 20 | +1.661 (+0.63; 3.8 → 2.1; 0.91; 0.018) | +0.952 (+0.20; 1.3 → 1.1; 0.96; 0.011) | +1.766 (+0.58; 3.9 → 1.8; 0.91; 0.019) |
+| progress only, window 50 | −0.269 (+0.24; 3.8 → 3.3; 0.92; 0.015) | +0.930 (+0.16; 1.6 → 2.0; 0.99; 0.010) | +1.334 (+0.78; 3.9 → 3.1; 0.90; 0.017) |
+| stance 0.1, window 1 (table above) | +2.736 (+0.23; 3.4 → 2.9; 1.00) | +3.339 (+0.59; 2.3 → 1.4; 1.00) | +1.938 (+0.20; 2.8 → 2.9; 1.00) |
+| stance 0.1, window 20 | +0.771 (+0.06; 4.3 → 4.9; 1.00; 0.004) | +0.231 (−0.02; 4.1 → 4.7; 1.00; −0.014) | +0.893 (+0.11; 4.6 → 4.6; 0.99; −0.001) |
+| random (table above) | −0.583 | +0.172 | −0.290 |
+
+The window removes the calm stall: no progress-only run under a window goes calm, every one
+is still aroused and still moving in its last 5000 moments, and the progress-only distance
+grows two to twenty times over window 1 (0.0–0.7 m to 1.0–1.8 m at window 20). It does not
+produce a better walker than the stance law. With the stance term the window halves to
+quarters the distance (0.2–0.9 m against 1.9–3.3): the brain keeps four to five feet down,
+its reward sits at zero or below, and the window's late, averaged credit is a weaker teacher
+than the moment's own progress. Window 50 is no better than 20 and its seed 0 ends behind
+its start. The windowed law trades the rocking exploit for slow, aroused learning, which is
+a different stall, not a gait. The default stays window 1 with stance 0.1, since that is the
+law that walked farthest; `--window` stays as an opt-in with this receipt. 4–5 ms a moment,
+since every moment learns.
+
+What a next step would measure, each against the same controls and on the eight-legged body:
+a longer life under window 20 progress only, the one law whose runs were still moving at
+30,000 moments; a continuation of the 34 m brain;
+a course hint on the net heading drift over a window rather than the unsigned turn; a lower
+actor eta or a shorter eligibility (`--gene lam=`); module sizes (`--gene modules=48,24`); and
+the population code's resolution (`--per 16`).
 
 CUDA (`--backend torch`, float32) ran the same brain at 21.9 ms per moment against
 4.3 ms on the CPU, as the library's placement rule predicts for a one-row brain of

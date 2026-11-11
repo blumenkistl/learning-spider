@@ -4,9 +4,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from '/static/vendor/three/jsm/controls/OrbitControls.js';
 
-const BODY = [0.15, 0.10, 0.06], HEAD_RADIUS = 0.06, HEAD_X = 0.19;
-const HIP_X = [0.12, 0.04, -0.04, -0.12], HIP_Y = 0.10;
-const FEMUR_R = 0.014, TIBIA_R = 0.010;
+const PROSOMA = [0.15, 0.10, 0.06], PROSOMA_X = 0.01;       // the front part, which carries the legs
+const ABDOMEN = [0.14, 0.115, 0.10], ABDOMEN_X = -0.26, ABDOMEN_Z = 0.03;
+const FEMUR_R = 0.014, TIBIA_R = 0.011, COXA_R = 0.017;
+const ROOT_Y = 0.03;                                  // where a leg leaves the body: well inside the ellipsoid
 
 // --- scene ---------------------------------------------------------------------------------
 const canvas = document.getElementById('world');
@@ -48,37 +49,6 @@ const rim = new THREE.Mesh(new THREE.RingGeometry(4.98, 5.02, 128), new THREE.Me
 rim.position.z = 0.002;
 scene.add(rim);
 
-// --- the spider ----------------------------------------------------------------------------
-const spider = new THREE.Group();
-scene.add(spider);
-const skin = new THREE.MeshStandardMaterial({ color: 0x8a6a3c, roughness: 0.7 });
-const legSkin = new THREE.MeshStandardMaterial({ color: 0x5a4328, roughness: 0.8 });
-const body = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), skin);
-body.scale.set(...BODY);
-body.castShadow = true;
-spider.add(body);
-const head = new THREE.Mesh(new THREE.SphereGeometry(HEAD_RADIUS, 24, 18), skin);
-head.position.set(HEAD_X, 0, 0.005);
-head.castShadow = true;
-spider.add(head);
-for (const s of [-1, 1]) {                           // eyes
-  const eye = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), new THREE.MeshStandardMaterial({ color: 0x101010 }));
-  eye.position.set(HEAD_X + 0.05, s * 0.025, 0.025);
-  spider.add(eye);
-}
-const unit = new THREE.CylinderGeometry(1, 1, 1, 10);
-const legs = [];
-for (let i = 0; i < 8; i++) {
-  const femur = new THREE.Mesh(unit, legSkin), tibia = new THREE.Mesh(unit, legSkin);
-  femur.castShadow = tibia.castShadow = true;
-  const knee = new THREE.Mesh(new THREE.SphereGeometry(FEMUR_R, 10, 8), legSkin);
-  const foot = new THREE.Mesh(new THREE.CircleGeometry(0.02, 16), new THREE.MeshBasicMaterial({ color: 0x5ad1ff, transparent: true, opacity: 0.8 }));
-  spider.add(femur, tibia, knee);
-  scene.add(foot);                                   // planted discs lie in the world, on the ground
-  foot.visible = false;
-  legs.push({ femur, tibia, knee, foot, hip: new THREE.Vector3(HIP_X[i % 4], (i < 4 ? 1 : -1) * HIP_Y, 0) });
-}
-
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _yUp = new THREE.Vector3(0, 1, 0);
 function placeCylinder(mesh, a, b, radius) {
   _d.subVectors(b, a);
@@ -88,14 +58,104 @@ function placeCylinder(mesh, a, b, radius) {
   mesh.quaternion.setFromUnitVectors(_yUp, _d.normalize());
 }
 
+// --- the spider ----------------------------------------------------------------------------
+const spider = new THREE.Group();
+scene.add(spider);
+const skin = new THREE.MeshStandardMaterial({ color: 0x1b2744, roughness: 0.75, metalness: 0.1 });   // cobalt-blue tarantula
+const legSkin = new THREE.MeshStandardMaterial({ color: 0x17357a, roughness: 0.55, metalness: 0.25 });
+const hairSkin = new THREE.LineBasicMaterial({ color: 0x05070c, transparent: true, opacity: 0.8 });
+let hairSeed = 7;
+const hairRand = () => (hairSeed = (hairSeed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+// Bristles in a mesh's own unit space: they inherit its scale, so a scaled cylinder or sphere stays hairy.
+function hairs(count, onSphere, lengthMin, lengthMax) {
+  const pts = [];
+  for (let i = 0; i < count; i++) {
+    const len = lengthMin + (lengthMax - lengthMin) * hairRand();
+    if (onSphere) {
+      const u = 2 * hairRand() - 1, t = 2 * Math.PI * hairRand(), r = Math.sqrt(1 - u * u);
+      const x = r * Math.cos(t), y = u, z = r * Math.sin(t);
+      pts.push(x, y, z, x * (1 + len), y * (1 + len), z * (1 + len));
+    } else {
+      const t = 2 * Math.PI * hairRand(), y = hairRand() - 0.5, tilt = 0.06 * (hairRand() - 0.5);
+      const x = Math.cos(t), z = Math.sin(t);
+      pts.push(x, y, z, x * (1 + len), y + tilt, z * (1 + len));
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  return new THREE.LineSegments(g, hairSkin);
+}
+const prosoma = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), skin);
+prosoma.scale.set(...PROSOMA);
+prosoma.position.x = PROSOMA_X;
+prosoma.castShadow = true;
+prosoma.add(hairs(500, true, 0.08, 0.18));
+spider.add(prosoma);
+const abdomen = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 24), skin);
+abdomen.scale.set(...ABDOMEN);
+abdomen.position.set(ABDOMEN_X, 0, ABDOMEN_Z);
+abdomen.castShadow = true;
+abdomen.add(hairs(900, true, 0.08, 0.2));
+spider.add(abdomen);
+const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.06, 12), legSkin);   // the pedicel
+waist.rotation.z = Math.PI / 2;
+waist.position.set(-0.14, 0, 0.012);
+spider.add(waist);
+const eyeSkin = new THREE.MeshStandardMaterial({ color: 0x5ad1ff, emissive: 0x2a7fb0, roughness: 0.3 });
+for (const [x, y, z, r] of [[0.150, 0.024, 0.030, 0.011], [0.150, -0.024, 0.030, 0.011]]) {   // two eyes
+  const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), eyeSkin);
+  eye.position.set(x, y, z);
+  spider.add(eye);
+}
+for (const sgn of [-1, 1]) {                           // chelicerae, hanging from the front
+  const fang = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.003, 0.035, 8), legSkin);
+  fang.position.set(0.15, sgn * 0.014, -0.035);
+  fang.rotation.x = sgn * 0.25;
+  spider.add(fang);
+}
+const unit = new THREE.CylinderGeometry(1, 1, 1, 12);
+const femurShape = new THREE.CylinderGeometry(1, 0.85, 1, 12);   // +y end goes to the knee
+const tibiaShape = new THREE.CylinderGeometry(0.55, 1, 1, 12);   // tapers to the foot
+const legs = [];                                     // built from /api/describe: the world says how many legs and where their hips are
+function buildLegs(hips) {
+  for (const leg of legs) { spider.remove(leg.coxa, leg.hipJoint, leg.femur, leg.tibia, leg.knee); scene.remove(leg.foot); }
+  legs.length = 0;
+  for (const [hx, hy] of hips) {
+  const femur = new THREE.Mesh(femurShape, legSkin), tibia = new THREE.Mesh(tibiaShape, legSkin);
+  femur.castShadow = tibia.castShadow = true;
+  femur.add(hairs(160, false, 0.3, 0.7));
+  tibia.add(hairs(200, false, 0.3, 0.8));
+  femur.visible = tibia.visible = false;             // unit cylinders until the first pose sizes them
+  const knee = new THREE.Mesh(new THREE.SphereGeometry(FEMUR_R * 1.15, 12, 10), legSkin);   // the patella
+  knee.visible = false;
+  const root = new THREE.Vector3(hx * 0.85, Math.sign(hy) * ROOT_Y, -0.004);
+  const hip = new THREE.Vector3(hx, hy, 0);
+  const coxa = new THREE.Mesh(unit, legSkin);         // body to hip: the physics hip sits outside the ellipsoid
+  coxa.castShadow = true;
+  coxa.add(hairs(60, false, 0.2, 0.5));
+  placeCylinder(coxa, root, hip, COXA_R);
+  const hipJoint = new THREE.Mesh(new THREE.SphereGeometry(COXA_R, 12, 10), legSkin);
+  hipJoint.position.copy(hip);
+  hipJoint.castShadow = true;
+  const foot = new THREE.Mesh(new THREE.CircleGeometry(0.02, 16), new THREE.MeshBasicMaterial({ color: 0x5ad1ff, transparent: true, opacity: 0.8 }));
+  spider.add(coxa, hipJoint, femur, tibia, knee);
+  scene.add(foot);                                   // planted discs lie in the world, on the ground
+  foot.visible = false;
+  legs.push({ coxa, hipJoint, femur, tibia, knee, foot, hip });
+  }
+}
+
+
 const target = new THREE.Vector3();
 let firstFrame = true;
+let lastPose = null;
 function draw(pose) {
+  lastPose = pose;
   const z = pose.z;
   spider.position.set(pose.x, pose.y, z);
   spider.rotation.set(0, 0, pose.heading);
   const c = Math.cos(pose.heading), s = Math.sin(pose.heading);
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < legs.length && i < pose.legs.length; i++) {
     const [kx, ky, kz, fx, fy, fz] = pose.legs[i];
     const leg = legs[i];
     _a.set(kx, ky, kz);                              // body frame: origin at the body centre
@@ -103,6 +163,7 @@ function draw(pose) {
     placeCylinder(leg.femur, leg.hip, _a, FEMUR_R);
     placeCylinder(leg.tibia, _a, _b, TIBIA_R);
     leg.knee.position.copy(_a);
+    leg.femur.visible = leg.tibia.visible = leg.knee.visible = true;
     leg.foot.visible = pose.planted[i];
     leg.foot.position.set(pose.x + c * fx - s * fy, pose.y + s * fx + c * fy, 0.003);
   }
@@ -139,6 +200,8 @@ const fmt = (v, d = 3) => (v === null || v === undefined) ? '—' : Number(v).to
 let described = null;
 fetch('/api/describe').then(r => r.json()).then(d => {
   described = d;
+  buildLegs(d.hips);
+  if (lastPose) draw(lastPose);                      // a frame may have arrived first (a paused server sends one)
   const b = d.brain;
   $('brainline').textContent = b
     ? `${b.neurons} neurons · ${b.parameters} parameters · ${b.placement.backend}${b.placement.device ? ':' + b.placement.device : ''} ${b.placement.precision} · seed ${d.seed}`
@@ -160,7 +223,7 @@ function update(m) {
   $('sweeps').textContent = `${m.sweeps} (${m.learning_sweeps} learning)`;
   $('ms').textContent = fmt(m.ms, 1);
   $('pace').textContent = m.pace > 0 ? `${m.pace}/s` : 'max';
-  $('stance').textContent = m.pose.planted.filter(Boolean).length + ' / 8';
+  $('stance').textContent = m.pose.planted.filter(Boolean).length + ' / ' + m.pose.planted.length;
   $('turned').textContent = `${fmt(m.turned, 1)} rad (${fmt(m.omega, 2)} rad/s)`;
   $('refusals').textContent = m.refusals;
   $('pause').textContent = m.paused ? 'Resume' : 'Pause';

@@ -177,3 +177,63 @@ def test_thread_runs_and_stops(tmp_path):
     time.sleep(0.3)
     life.stop()
     assert 10 <= life.moments <= 80
+
+
+class SwayPolicy(RecordingPolicy):
+    """All hips back one moment, all hips forward the next: the body sways and nets nothing."""
+
+    def moment(self, observation, reward, done=False):
+        out = super().moment(observation, reward, done)
+        if self.moments % 2 == 0:
+            out["commands"] = [2 if i % 2 == 0 else 1 for i in range(JOINTS)]
+        return out
+
+
+class HalfStrokePolicy(RecordingPolicy):
+    """Four legs stroke back while four anchor: half the speed, so the pay stays under the cap."""
+
+    def moment(self, observation, reward, done=False):
+        out = super().moment(observation, reward, done)
+        out["commands"] = [0 if i in (0, 2, 8, 10) else 1 for i in range(JOINTS)]
+        return out
+
+
+def test_windowed_progress_pays_a_walk_and_not_a_sway(tmp_path):
+    walk = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0, window=20)
+    walk.policy = HalfStrokePolicy()
+    each = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0)
+    each.policy = HalfStrokePolicy()
+    earned_walk, earned_each = 0.0, 0.0
+    for _ in range(40):                                      # the stroke ends at the hip limit after 8 moments
+        earned_walk += walk.tick()["reward"]; earned_each += each.tick()["reward"]
+    assert earned_walk == pytest.approx(earned_each, abs=1e-3)   # the window spreads the same pay over 20 moments
+    assert walk.distance_forward == pytest.approx(each.distance_forward) and earned_walk > 0.05
+
+    sway = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0, window=20)
+    sway.policy = SwayPolicy()
+    per_moment = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0)
+    per_moment.policy = SwayPolicy()
+    for _ in range(60):                                      # the sway settles into its alternation
+        sway.tick(); per_moment.tick()
+    earned_sway, earned_each = 0.0, 0.0
+    for _ in range(60):
+        sway.tick(); per_moment.tick()
+        earned_sway += sway.reward; earned_each += per_moment.reward
+    assert abs(sway.distance_forward) < 0.01                 # it went nowhere
+    assert earned_each > 0.2                                 # the per-moment law pays the forward half of each sway
+    assert earned_sway < 0.02                                # the windowed law does not
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs=tmp_path, window=0)
+
+
+def test_save_carries_the_progress_window(tmp_path):
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", window=20)
+    for _ in range(12):
+        life.tick()
+    life.save()
+    assert len(json.loads((tmp_path / "spider.json").read_text())["progress_window"]) == 12
+    again = Life("brain", seed=99, pace=0, runs=tmp_path, backend="cpu", window=20)
+    again.load()
+    assert list(again._progress) == list(life._progress)
+    for _ in range(6):
+        assert life.tick()["reward"] == again.tick()["reward"]
