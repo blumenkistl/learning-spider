@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Learning Spider</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script type="importmap">
+    {"imports": {"three": "/static/vendor/three/three.module.min.js"}}
+  </script>
+</head>
+<body>
+  <canvas id="world"></canvas>
+
+  <aside id="hud">
+    <h1>Learning Spider <span id="policy" class="tag">—</span></h1>
+    <div class="grid">
+      <div><span class="k">moment</span><span class="v" id="moments">0</span></div>
+      <div><span class="k">mode</span><span class="v" id="mode">idle</span></div>
+      <div><span class="k">forward</span><span class="v" id="forward">0.000 m</span></div>
+      <div><span class="k">from origin</span><span class="v" id="net">0.000 m</span></div>
+      <div><span class="k">speed</span><span class="v" id="speed">0.000 m/s</span></div>
+      <div><span class="k">reward</span><span class="v" id="reward">—</span></div>
+      <div><span class="k">level / want</span><span class="v" id="arousal">—</span></div>
+      <div><span class="k">sweeps</span><span class="v" id="sweeps">—</span></div>
+      <div><span class="k">ms / moment</span><span class="v" id="ms">—</span></div>
+      <div><span class="k">pace</span><span class="v" id="pace">—</span></div>
+      <div><span class="k">feet planted</span><span class="v" id="stance">—</span></div>
+      <div><span class="k">turned</span><span class="v" id="turned">—</span></div>
+      <div><span class="k">refusals</span><span class="v" id="refusals">0</span></div>
+    </div>
+    <p id="blocks" class="small"></p>
+    <p id="notes" class="small"></p>
+
+    <div class="buttons">
+      <button data-op="pause" id="pause">Pause</button>
+      <button data-op="recentre">Recentre</button>
+      <button data-op="save">Save</button>
+      <button data-op="load">Load</button>
+    </div>
+    <div class="buttons">
+      <span class="k">policy</span>
+      <button data-op="policy" data-value="brain">brain</button>
+      <button data-op="policy" data-value="random">random</button>
+      <button data-op="policy" data-value="frozen">frozen copy</button>
+    </div>
+    <div class="buttons">
+      <span class="k">pace</span>
+      <button data-op="pace" data-value="20">1×</button>
+      <button data-op="pace" data-value="40">2×</button>
+      <button data-op="pace" data-value="100">5×</button>
+      <button data-op="pace" data-value="0">max</button>
+    </div>
+    <p class="small" id="brainline">—</p>
+    <canvas id="brain" width="320" height="96"></canvas>
+    <p class="small">drag to turn the world · wheel to zoom · <span id="link">connecting…</span></p>
+  </aside>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

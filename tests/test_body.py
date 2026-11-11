@@ -1,0 +1,178 @@
+import math
+
+import numpy as np
+import pytest
+
+from spider.body import (
+    ARENA_RADIUS, CONTACT_Z, HEIGHT, HIP_RANGE, JOINTS, KNEE_RANGE, LEGS, Spider, kinematics,
+)
+
+
+def hold():
+    return [1] * JOINTS
+
+
+def command(hips=1, knees=1, legs=range(LEGS)):
+    cmd = hold()
+    for i in legs:
+        cmd[2 * i] = hips
+        cmd[2 * i + 1] = knees
+    return cmd
+
+
+def test_rest_pose_is_planted_and_mirrored():
+    spider = Spider()
+    knee, foot = kinematics(spider.joints)
+    assert np.all(np.abs(HEIGHT + foot[:, 2]) < 1e-9)
+    assert spider.planted().all()
+    assert spider.stance_count == LEGS
+    # left legs 0-3 mirror right legs 4-7 in y
+    assert np.allclose(foot[:4, 0], foot[4:, 0])
+    assert np.allclose(foot[:4, 1], -foot[4:, 1])
+    assert np.allclose(knee[:4, 1], -knee[4:, 1])
+    assert spider.z == HEIGHT
+
+
+def test_joints_clip_at_their_ranges():
+    spider = Spider()
+    for _ in range(100):
+        spider.step(command(hips=2, knees=2))
+    assert np.allclose(spider.joints[:, 0], HIP_RANGE[1])
+    assert np.allclose(spider.joints[:, 1], KNEE_RANGE[1])
+    for _ in range(100):
+        spider.step(command(hips=0, knees=0))
+    assert np.allclose(spider.joints[:, 0], HIP_RANGE[0])
+    assert np.allclose(spider.joints[:, 1], KNEE_RANGE[0])
+
+
+def test_bad_commands_refused():
+    with pytest.raises(ValueError):
+        Spider().step([3] * JOINTS)
+
+
+def test_all_hips_sweeping_back_moves_forward_without_turning():
+    spider = Spider()
+    progress = 0.0
+    for _ in range(6):
+        progress += spider.step(command(hips=0))["progress"]
+    assert spider.x > 0.01
+    assert progress > 0.01
+    assert abs(spider.heading) < 1e-9
+    assert abs(spider.y) < 1e-9
+
+
+def test_lifted_legs_push_nothing():
+    spider = Spider()
+    for _ in range(10):
+        spider.step(command(knees=2))
+    assert spider.stance_count == 0
+    for _ in range(6):
+        spider.step(command(hips=0))
+    assert abs(spider.x) < 1e-9
+    assert abs(spider.heading) < 1e-9
+
+
+def test_step_reports_the_turn():
+    spider = Spider()
+    assert spider.step(hold())["turn"] == 0.0
+    turned = 0.0
+    for _ in range(6):
+        turned += spider.step(command(hips=0, legs=range(4)))["turn"]
+    assert turned < 0.0
+    assert turned == pytest.approx(spider.heading, abs=1e-9)   # the moments' turns sum to the heading
+
+
+def test_left_stroke_turns_right_and_moves_forward():
+    spider = Spider()
+    for _ in range(6):
+        spider.step(command(hips=0, legs=range(4)))
+    assert spider.x > 0.0
+    assert spider.heading < 0.0
+
+
+def test_closed_cycle_with_all_feet_planted_nets_nothing():
+    spider = Spider()
+    for _ in range(4):
+        spider.step(command(hips=0))
+    for _ in range(4):
+        spider.step(command(hips=2))
+    # let the grip filter and the decay settle
+    for _ in range(40):
+        spider.step(hold())
+    assert abs(spider.x) < 2e-3
+    assert abs(spider.heading) < 2e-3
+
+
+def test_a_gait_moves_the_body():
+    """Two groups of legs alternating stance and swing walk the body forward."""
+    spider = Spider()
+    a, b = [0, 2, 5, 7], [1, 3, 4, 6]
+    for _ in range(100):
+        for group, other in ((a, b), (b, a)):
+            cmd = hold()
+            for i in other:
+                cmd[2 * i + 1] = 2      # lift
+            for _ in range(2):
+                spider.step(cmd)
+            cmd = hold()
+            for i in group:
+                cmd[2 * i] = 0          # stroke back, planted
+            for i in other:
+                cmd[2 * i] = 2          # swing forward, lifted
+            for _ in range(3):
+                spider.step(cmd)
+            cmd = hold()
+            for i in other:
+                cmd[2 * i + 1] = 0      # plant
+            for _ in range(2):
+                spider.step(cmd)
+    assert spider.x > 0.3
+
+
+def test_recentre_keeps_joints_and_heading():
+    spider = Spider()
+    for _ in range(3):
+        spider.step(command(hips=0, legs=range(4)))
+    twin = Spider.restore(spider.state_dict())
+    spider.x, spider.y = ARENA_RADIUS + 1.0, 0.0
+    out = spider.step(hold())
+    twin.step(hold())
+    assert out["recentred"]
+    assert spider.x == 0.0 and spider.y == 0.0
+    assert np.allclose(spider.joints, twin.joints)
+    assert spider.heading == twin.heading       # the moment's own turn still happens
+    assert spider.recentres == 1
+
+
+def test_state_round_trip():
+    spider = Spider()
+    for i in range(7):
+        spider.step(command(hips=i % 3, knees=(i + 1) % 3, legs=[0, 3, 5]))
+    twin = Spider.restore(spider.state_dict())
+    for _ in range(5):
+        a = spider.step(command(hips=0))
+        b = twin.step(command(hips=0))
+        assert a == b
+    assert twin.state_dict() == spider.state_dict()
+
+
+def test_pose_shape():
+    pose = Spider().pose()
+    assert len(pose["legs"]) == LEGS and len(pose["legs"][0]) == 6
+    assert len(pose["joints"]) == JOINTS and len(pose["planted"]) == LEGS
+    assert all(abs(HEIGHT + leg[5]) <= CONTACT_Z for leg in pose["legs"])
+
+
+def test_pressing_leg_touches_the_ground_where_the_tibia_crosses_it():
+    from spider.body import CONTACT_Z, HEIGHT, kinematics
+    rest = np.zeros((LEGS, 2))
+    pressed = rest.copy()
+    pressed[:, 1] = -0.3
+    knee_rest, foot_rest = kinematics(rest)
+    knee, foot = kinematics(pressed)
+    assert np.allclose(foot[:, 2], -HEIGHT)                       # on the ground, not below it
+    assert np.all(HEIGHT + foot[:, 2] <= CONTACT_Z)               # planted
+    reach_rest = np.hypot(foot_rest[:, 0] - knee_rest[:, 0], foot_rest[:, 1] - knee_rest[:, 1])
+    reach = np.hypot(foot[:, 0] - knee[:, 0], foot[:, 1] - knee[:, 1])
+    assert np.all(reach < reach_rest)                             # the contact point moves in under the knee
+    assert Spider(joints=pressed).stance_count == LEGS

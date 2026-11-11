@@ -1,0 +1,72 @@
+# Building on the learning spider
+
+This is an application of [Cadence](https://github.com/muellerberndt/cadence). Its rules
+apply here unchanged: read `~/git/github/cadence/AGENTS.md` (or the copy in the installed
+release's repository) before changing how the brain is composed, taught or measured, and the
+[README](README.md) of this project for what is built and what was measured.
+
+## What this project is
+
+One continuing Cadence brain commands an eight-legged body of sixteen joints in a simulated
+world and learns, from the world's reward alone, to move forward. The web page is a window and a
+set of controls on that one life; it is not the model. The headless nursery is the same life
+without a page, for measurement.
+
+## Rules this project keeps
+
+- **One continuing brain.** The brain is composed once (`Brain.compose(..., arousal=...)`) and
+  lives through `brain.live`. It is never recreated per moment, per episode or per page load.
+  A saved life is continued, with its world and its pending outcome, not replayed.
+- **No controller between brain and motors.** Each motor slot is one joint's
+  `decrease / hold / increase`. There is no gait generator, oscillator, inverse kinematics or
+  smoothing between the brain's answer and the joints. Adding one makes a different model;
+  label it as a control.
+- **The world supplies problems, never answers.** The reward is the body's forward progress
+  along its own heading, capped. No target pose, no phase, no "move leg 3 now". Shaping terms
+  (lateral drift, yaw, posture) are not added without a measured reason and a README note.
+  Two such terms are in: every foot short of four planted through the moment takes a small
+  amount (`STANCE_PAY` in `spider/life.py`), and so does every radian turned (`YAW_PAY`).
+  Both are labelled as shaping, their readings are in the README, and `--stance-pay 0
+  --yaw-pay 0` in the nursery restores progress-only pay for comparison.
+- **Every outcome is delivered exactly once.** `Life.reward` is the last executed command's
+  outcome not yet delivered. A refusal keeps it in the policy's `owed`; a policy switch moves it
+  to the brain's `owed`; a save writes it to the sidecar; a load delivers it. Keep the tests in
+  `tests/test_life.py` and `tests/test_brain.py` that prove this.
+- **Controls are named honestly.** `random` is the baseline; `frozen` is a brain that answers
+  greedily and never learns, either a newborn or a save/load copy of the live brain. Neither
+  saves. The page shows which policy commands the body at every moment.
+- **Memory writes and reads are the brain's.** Episodic and working memory are composed in;
+  the application declares no memory of its own, keys nothing on raw observations and does not
+  reach into the brain's memory to help it. Recall memory is off by name (`recall=False`);
+  turning it on is a gene to measure, not a default to flip.
+- **Readings are readings.** A block's forward metres, reward per moment, aroused share and
+  sweeps are what the nursery measured on one machine with one seed each; they are not a claim
+  about the library. A found gait is reported as what it is. Change a founder gene only with a
+  nursery comparison against the previous value, random and frozen, at matched moments and
+  seeds, written into the README's measurement section.
+- **Residuals are not energy.** `ms/moment` and sweep counts are costs of this implementation
+  on this machine; they establish nothing about efficiency in general.
+
+## Where things are
+
+| Part | File |
+| --- | --- |
+| Body, kinematics, contact model | `spider/body.py` |
+| Senses (population code + planted flags) | `spider/senses.py` |
+| Founder genes, the brain wrapper, the controls | `spider/brain.py` |
+| The life: reward, blocks, custody, save/load, the loop thread | `spider/life.py` |
+| Headless measurement | `spider/nursery.py` |
+| The web server | `spider/server.py`, `server.py` |
+| The page | `static/index.html`, `static/app.js`, `static/style.css` |
+| Tests | `tests/` (`python -m pytest tests -q`) |
+| Saved lives | `runs/` (gitignored) |
+
+## Checks before a change lands
+
+1. `.venv/bin/python -m pytest tests -q` passes.
+2. A change to the body, senses, reward or founder genes comes with nursery readings
+   (3000 moments, seeds 0–2, brain / random / frozen newborn / frozen raised copy) and the README's
+   measurement section updated with them.
+3. A change to custody, save or load keeps `tests/test_life.py::test_save_and_load_continue_the_same_life` and the
+   policy-switch test passing and adds a test for the new path.
+4. The page still works at `http://127.0.0.1:8080` after a restart from `runs/`.
