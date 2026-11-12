@@ -60,7 +60,7 @@ next start, with the world's state and the outcome the brain had not yet receive
 and starting the server is not a new spider. Delete `runs/` for a newborn.
 
 Environment variables for the server: `PORT` (8080), `POLICY` (`brain`), `SEED` (0), `PACE`
-(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0.1), `YAW_PAY` (0) and
+(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0), `YAW_PAY` (0) and
 `PROGRESS_WINDOW` (1), the reward's two hints and its window described under
 [the reward](#the-reward-spiderlifepy).
 
@@ -134,7 +134,7 @@ it touches the ground: 152 inputs in `[0, 1]`. No constant drive input, no targe
 
 ### The reward (`spider/life.py`)
 
-`reward = clip(40 × progress, 0, 0.5) − 0.1 × max(0, 4 − stance) − yaw_pay × |turn|`,
+`reward = clip(40 × progress, 0, 0.5) − stance_pay × max(0, 4 − stance) − yaw_pay × |turn|`,
 clipped to ±0.5, where progress is the metres moved this moment along the heading held at the
 start of the moment, stance is the number of feet planted through the moment (at its start and
 its end) and turn is the radians the heading changed. Backward, sideways and standing still pay
@@ -144,15 +144,19 @@ back earns nothing over the window; the window is saved with the life. Its readi
 "The windowed reward" below; the default stays 1.
 
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
-is paying for a posture and a course, not for an outcome. The stance term was added after the
-learner under progress alone walked on ever fewer feet (three to one on average over 30,000
-moments) and stalled once calm. At 0.02 a foot the learner ignored it; at 0.1 it keeps four
-feet down and walks less far. The yaw term exists because progress along the body's own
-heading pays a circle as well as a straight line, but it ships switched off (`yaw_pay = 0`):
-at 0.1 and 1 a radian the learner ignored it, and at 5 it obeyed by standing still. Four
-planted feet cost nothing, so the only positive reward is still forward progress. The readings
-for each are below. `--stance-pay` and `--yaw-pay` in the nursery, or `STANCE_PAY` and
-`YAW_PAY` in the server's environment, set the doses; both at 0 is the progress-only law.
+is paying for a posture and a course, not for an outcome. Both ship switched off
+(`stance_pay = 0`, `yaw_pay = 0`), so the shipped law is progress only. The stance term was
+added after the learner under progress alone walked on ever fewer feet (three to one on
+average over 30,000 moments) and stalled once calm. At 0.02 a foot the learner ignored it; at
+0.1 it keeps four feet down on the star body and walks less far there, while on the splayed
+body it is the law that walked farthest (readings below). It was the default until the
+project chose the unshaped law as the one to ship, with the dose kept as an option. The yaw
+term exists because progress along the body's own heading pays a circle as well as a straight
+line: at 0.1 and 1 a radian the learner ignored it, and at 5 it obeyed by standing still.
+Four planted feet cost nothing under either hint, so the only positive reward is forward
+progress. The readings for each are below. `--stance-pay` and `--yaw-pay` in the nursery, or
+`STANCE_PAY` and `YAW_PAY` in the server's environment, set the doses; 0.1 is the measured
+stance dose.
 
 The first law paid backward progress negatively (`clip(…, −0.5, 0.5)`). Under it the learning
 brain lifted every foot within 10,000 moments and stood still, since a push could pay negative
@@ -195,7 +199,7 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 3000 --policy frozen --seed 0            # a newborn, never learns
 .venv/bin/python -m spider.nursery --moments 3000 --policy frozen --brain runs/s0.npz # the raised brain, frozen
 .venv/bin/python -m spider.nursery --moments 3000 --policy brain --brain runs/s0.npz  # continue the saved life
-.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --stance-pay 0  # progress only
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --stance-pay 0.1  # the posture hint, measured dose
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --yaw-pay 5     # charge turning too
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --window 20      # pay the mean progress of 20 moments
 ```
@@ -277,7 +281,7 @@ rows repeated from the table above:
 | --- | --- | --- | --- |
 | brain, progress only | +2.425 (3.3 → 1.1) | +0.846 (1.1 → 0.6) | +2.123 (2.8 → 1.1) |
 | brain, 0.02 a missing foot | +2.279 (4.1 → 1.4) | +1.252 (1.1 → 1.0) | +1.476 (3.1 → 1.0) |
-| brain, 0.1 a missing foot (shipped) | +0.600 (4.2 → 4.5) | +0.688 (2.4 → 4.0) | +1.024 (3.7 → 3.0) |
+| brain, 0.1 a missing foot | +0.600 (4.2 → 4.5) | +0.688 (2.4 → 4.0) | +1.024 (3.7 → 3.0) |
 | actor rates 0, progress only | +0.375 (4.1 → 4.1) | +1.016 (1.8 → 1.9) | +0.160 (4.3 → 4.5) |
 | actor rates 0, 0.02 | +0.178 (4.2 → 3.9) | +1.217 (1.9 → 1.9) | +0.715 (4.5 → 4.2) |
 | actor rates 0, 0.1 | -0.271 (3.8 → 3.9) | +3.014 (2.0 → 2.0) | +0.518 (3.7 → 4.1) |
@@ -302,7 +306,7 @@ for, and the brain pays for it with the outcome.
 changed each moment, so it counts the jitter of shuffling feet as well as circling. Every policy
 turns a great deal by that measure: random turns 600, 510 and 580 radians in 30,000 moments,
 the no-learning twin 460, 700 and 360, the brain under the stance term alone 360, 250 and 450,
-about 0.013 radians a moment. The same comparison with the yaw charge added to the shipped
+about 0.013 radians a moment. The same comparison with the yaw charge added to the then shipped
 stance term, 30,000 moments, forward metres with the radians turned (first 5000 → last 5000):
 
 | 30,000 moments | Seed 0 | Seed 1 | Seed 2 |
@@ -325,7 +329,7 @@ gait does not pay.
 
 **The long legs.** The tarantula body lengthened the femur from 0.10 to 0.16 m and the tibia
 from 0.14 to 0.20 m, so a stroke of the same hip angle carries the body almost twice as far.
-Fresh brains in that world, the shipped reward (stance 0.1, yaw off), 30,000 moments, against
+Fresh brains in that world, the reward shipped at the time (stance 0.1, yaw off), 30,000 moments, against
 random:
 
 | 30,000 moments, forward metres (planted feet, first 5000 → last 5000) | Seed 0 | Seed 1 | Seed 2 |
@@ -457,8 +461,9 @@ quarters the distance (0.2–0.9 m against 1.9–3.3): the brain keeps four to f
 its reward sits at zero or below, and the window's late, averaged credit is a weaker teacher
 than the moment's own progress. Window 50 is no better than 20 and its seed 0 ends behind
 its start. The windowed law trades the rocking exploit for slow, aroused learning, which is
-a different stall, not a gait. The default stays window 1 with stance 0.1, since that is the
-law that walked farthest; `--window` stays as an opt-in with this receipt. 4–5 ms a moment,
+a different stall, not a gait. Window 1 with stance 0.1 is the law that walked farthest;
+the shipped default is window 1 progress only, chosen for the unshaped reward, with the
+stance dose and `--window` as opt-ins with these receipts. 4–5 ms a moment,
 since every moment learns.
 
 What a next step would measure, each against the same controls and on the eight-legged body:

@@ -6,7 +6,7 @@ WebSocket at the life's pace (at most 30 frames a second) and takes controls as 
 
 Environment: HOST (127.0.0.1), PORT (8080), POLICY (brain), SEED (0), PACE (20 moments/s),
 BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs), AUTOSAVE_MINUTES (5),
-STANCE_PAY (0.1), YAW_PAY (0) and PROGRESS_WINDOW (1), the reward's settings.
+STANCE_PAY (0), YAW_PAY (0) and PROGRESS_WINDOW (1), the reward's settings.
 A saved life in RUNS is continued; shutdown saves it.
 """
 

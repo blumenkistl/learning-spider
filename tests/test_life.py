@@ -49,12 +49,13 @@ def test_each_outcome_reaches_the_policy_once_and_in_order(tmp_path):
 
 
 def test_feet_short_of_four_take_pay():
-    assert pay(0.0, 4) == 0.0 and pay(0.0, 8) == 0.0
-    assert pay(0.0, 3) == pytest.approx(-0.1) and pay(0.0, 0) == pytest.approx(-0.4)
-    assert pay(0.001, 2) == pytest.approx(0.04 - 0.2)
-    assert pay(1.0, 0) == pytest.approx(0.5 - 0.4)
-    assert pay(0.0, 0, stance_pay=0.0) == 0.0            # progress-only pay, the earlier law
-    assert pay(-1.0, 0) == pytest.approx(-0.4)           # backward still pays zero progress
+    assert pay(0.0, 0) == 0.0                            # off by default: progress-only pay
+    hint = dict(stance_pay=0.1)                          # the measured dose, switched on by hand
+    assert pay(0.0, 4, **hint) == 0.0 and pay(0.0, 8, **hint) == 0.0
+    assert pay(0.0, 3, **hint) == pytest.approx(-0.1) and pay(0.0, 0, **hint) == pytest.approx(-0.4)
+    assert pay(0.001, 2, **hint) == pytest.approx(0.04 - 0.2)
+    assert pay(1.0, 0, **hint) == pytest.approx(0.5 - 0.4)
+    assert pay(-1.0, 0, **hint) == pytest.approx(-0.4)   # backward still pays zero progress
 
 
 def test_turning_takes_pay_when_switched_on():

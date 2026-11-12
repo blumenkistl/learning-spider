@@ -32,7 +32,8 @@ from .senses import DEFAULT as DEFAULT_SENSES, Senses
 PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full stroke speed of 0.2 m/s
 PROGRESS_CAP = 0.5      # the Robot Arena's cap, under the dopamine cap of 1.0
 STANCE_FLOOR = LEGS // 2   # feet the world wants on the ground through every moment: half of them
-STANCE_PAY = 0.1        # taken per foot short of the floor: a hint, shaping, not an outcome (0.02 was ignored)
+STANCE_PAY = 0.0        # taken per foot short of the floor: a hint, shaping, not an outcome; off by default,
+                        # 0.1 is the measured dose (README, "The stance term"); --stance-pay / STANCE_PAY set it
 PROGRESS_WINDOW = 1     # moments the progress term is averaged over: 1 pays each moment's own progress;
                         # a window pays the mean over the last N, which a sway that nets nothing cannot earn
                         # (README, "The rocking"); --window / PROGRESS_WINDOW set it
