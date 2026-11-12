@@ -2,16 +2,20 @@
 WebSocket at the life's pace (at most 30 frames a second) and takes controls as JSON.
 
     python server.py                    # http://127.0.0.1:8080
+    python server.py --high-water --stance-pay 0.1
     PORT=8090 POLICY=random python -m spider
 
-Environment: HOST (127.0.0.1), PORT (8080), POLICY (brain), SEED (0), PACE (20 moments/s),
-BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs), AUTOSAVE_MINUTES (5),
-STANCE_PAY (0), YAW_PAY (0) and PROGRESS_WINDOW (1), the reward's settings.
-A saved life in RUNS is continued; shutdown saves it.
+The flags are the nursery's (``python server.py --help``). Each has an environment variable
+of the same meaning that sets its default: HOST (127.0.0.1), PORT (8080), POLICY (brain),
+SEED (0), PACE (20 moments/s), BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs),
+AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1) and HIGH_WATER (0),
+the reward's settings. A saved life in RUNS is continued, with its own genes; shutdown
+saves it.
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import logging
@@ -21,6 +25,8 @@ from pathlib import Path
 from aiohttp import web
 
 from .life import HIGH_WATER, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
+from .nursery import genes_from, parse_gene
+from .senses import Senses
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 FRAME_SECONDS = 1.0 / 30.0
@@ -96,29 +102,64 @@ async def _push(ws: web.WebSocketResponse, life: Life) -> None:
         await asyncio.sleep(FRAME_SECONDS)
 
 
-def life_from_env() -> Life:
-    runs = Path(os.environ.get("RUNS", "runs"))
-    policy = os.environ.get("POLICY", "brain")
+def _flag(name: str, default: bool) -> bool:
+    return os.environ.get(name, "1" if default else "0").strip().lower() not in ("", "0", "false", "no")
+
+
+def arguments(argv: list[str] | None = None) -> argparse.Namespace:
+    """The server's flags, the nursery's names; the environment sets each one's default."""
+    env = os.environ.get
+    parser = argparse.ArgumentParser(description="the learning spider's web server")
+    parser.add_argument("--host", default=env("HOST", "127.0.0.1"))
+    parser.add_argument("--port", type=int, default=int(env("PORT", "8080")))
+    parser.add_argument("--policy", choices=("brain", "random", "frozen"), default=env("POLICY", "brain"))
+    parser.add_argument("--seed", type=int, default=int(env("SEED", "0")))
+    parser.add_argument("--pace", type=float, default=float(env("PACE", "20")),
+                        help="moments a second (default 20; 0 = as fast as possible)")
+    parser.add_argument("--backend", default=env("BACKEND") or None, help="auto (default), cpu, torch or torch:<device>")
+    parser.add_argument("--runs", type=Path, default=Path(env("RUNS", "runs")), help="where the life is saved and continued from")
+    parser.add_argument("--autosave-minutes", type=float, default=float(env("AUTOSAVE_MINUTES", "5")),
+                        help="minutes between autosaves (default 5; 0 = off)")
+    parser.add_argument("--gene", type=parse_gene, action="append", default=[],
+                        help="name=value for a newborn brain, e.g. modules=48,24 (repeatable; a saved brain keeps its own)")
+    parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
+    parser.add_argument("--stance-pay", type=float, default=float(env("STANCE_PAY", STANCE_PAY)),
+                        help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
+    parser.add_argument("--yaw-pay", type=float, default=float(env("YAW_PAY", YAW_PAY)),
+                        help=f"reward taken per radian turned in a moment (default {YAW_PAY}; 0 = off)")
+    parser.add_argument("--window", type=int, default=int(env("PROGRESS_WINDOW", PROGRESS_WINDOW)),
+                        help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
+    parser.add_argument("--high-water", action="store_true", default=_flag("HIGH_WATER", HIGH_WATER),
+                        help="pay new ground only: progress beyond the farthest point reached (default off)")
+    return parser.parse_args(argv)
+
+
+def life_from(args: argparse.Namespace) -> Life:
+    """The life the flags describe; a saved life under ``--runs`` is continued."""
     life = Life(
-        policy,
-        seed=int(os.environ.get("SEED", "0")),
-        pace=float(os.environ.get("PACE", "20")),
-        runs=runs,
-        backend=os.environ.get("BACKEND") or None,
-        stance_pay=float(os.environ.get("STANCE_PAY", STANCE_PAY)),
-        yaw_pay=float(os.environ.get("YAW_PAY", YAW_PAY)),
-        window=int(os.environ.get("PROGRESS_WINDOW", PROGRESS_WINDOW)),
-        high_water=os.environ.get("HIGH_WATER", "1" if HIGH_WATER else "0") not in ("", "0", "false", "no"),
+        args.policy,
+        seed=args.seed,
+        pace=args.pace,
+        runs=args.runs,
+        genes=genes_from(args.gene) or None,
+        backend=args.backend,
+        senses=Senses(per=args.per) if args.per else Senses(),
+        stance_pay=args.stance_pay,
+        yaw_pay=args.yaw_pay,
+        window=args.window,
+        high_water=args.high_water,
     )
-    if policy == "brain" and life.brain_file.exists():
+    life.autosave_minutes = float(args.autosave_minutes)
+    if args.policy == "brain" and life.brain_file.exists():
         report = life.load()
         log.info("continued %s: moment %s, custody %s", life.brain_file, life.moments, report.get("custody"))
     return life
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
-    life = life_from_env()
+    args = arguments(argv)
+    life = life_from(args)
     app = make_app(life)
 
     async def on_startup(app: web.Application) -> None:
@@ -133,10 +174,9 @@ def main() -> None:
 
     app.on_startup.append(on_startup)
     app.on_shutdown.append(on_shutdown)
-    host = os.environ.get("HOST", "127.0.0.1")
-    port = int(os.environ.get("PORT", "8080"))
-    log.info("spider on http://%s:%d policy=%s", host, port, life.policy.policy)
-    web.run_app(app, host=host, port=port, print=None)
+    log.info("spider on http://%s:%d policy=%s reward=%s", args.host, args.port, life.policy.policy,
+             life.describe()["reward"])
+    web.run_app(app, host=args.host, port=args.port, print=None)
 
 
 if __name__ == "__main__":

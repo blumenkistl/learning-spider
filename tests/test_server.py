@@ -73,3 +73,25 @@ async def test_brainview_route(tmp_path):
         assert len(payload["cells"]) == payload["counts"]["neurons"] == len(payload["order"])
         state = await (await client.get("/api/state")).json()
         assert len(state["activity"]["all"]) == payload["counts"]["neurons"]
+
+
+def test_flags_mirror_the_nursery_and_the_environment_sets_defaults(tmp_path, monkeypatch):
+    from spider.server import arguments, life_from
+
+    monkeypatch.delenv("HIGH_WATER", raising=False)
+    args = arguments(["--high-water", "--stance-pay", "0.1", "--window", "20", "--port", "8090",
+                      "--policy", "random", "--runs", str(tmp_path), "--autosave-minutes", "0",
+                      "--gene", "modules=48,24", "--per", "4"])
+    assert args.port == 8090 and args.high_water is True and args.stance_pay == 0.1 and args.window == 20
+    life = life_from(args)
+    assert life.high_water is True and life.stance_pay == 0.1 and life.window == 20
+    assert life.runs == tmp_path and life.autosave_minutes == 0.0 and life.senses.inputs < 152
+    assert life.policy.policy == "random"
+
+    monkeypatch.setenv("HIGH_WATER", "1")
+    monkeypatch.setenv("STANCE_PAY", "0.1")
+    monkeypatch.setenv("PORT", "8091")
+    args = arguments([])
+    assert args.high_water is True and args.stance_pay == 0.1 and args.port == 8091
+    monkeypatch.setenv("HIGH_WATER", "0")
+    assert arguments([]).high_water is False and arguments(["--high-water"]).high_water is True

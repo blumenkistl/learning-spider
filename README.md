@@ -59,10 +59,16 @@ The server autosaves every five minutes and at shutdown, and continues a saved l
 next start, with the world's state and the outcome the brain had not yet received. Stopping
 and starting the server is not a new spider. Delete `runs/` for a newborn.
 
-Environment variables for the server: `PORT` (8080), `POLICY` (`brain`), `SEED` (0), `PACE`
-(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0), `YAW_PAY` (0), `PROGRESS_WINDOW` (1)
-and `HIGH_WATER` (0), the reward's two hints, its window and its high-water mark described
-under [the reward](#the-reward-spiderlifepy).
+The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--port` (8080),
+`--policy` (`brain`), `--seed` (0), `--pace` (20), `--backend` (auto), `--runs` (`runs`),
+`--autosave-minutes` (5), `--gene` and `--per` for a newborn brain, and the reward's settings
+`--stance-pay` (0), `--yaw-pay` (0), `--window` (1) and `--high-water` (off), the two hints, the
+window and the high-water mark described under [the reward](#the-reward-spiderlifepy). An
+environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
+`AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`) sets a flag's
+default. A saved life is continued with its own genes; a reward setting applies from the
+start it is given at, and the high-water mark of a life saved without one starts where the
+body stands.
 
 For development against a checkout of the library: `.venv/bin/python -m pip install -e ../cadence`.
 

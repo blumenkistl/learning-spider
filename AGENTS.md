@@ -30,7 +30,8 @@ without a page, for measurement.
   moment takes `STANCE_PAY` (off by default; 0.1 is the measured dose), and every radian turned takes `YAW_PAY`
   (off by default: no measured dose straightened the course without stopping the walk).
   Both are labelled as shaping, their readings are in the README, and `--stance-pay` and
-  `--yaw-pay` in the nursery, or the same names in the server's environment, set them.
+  `--yaw-pay` in the nursery and the server, or the same names in the server's environment,
+  set them.
   The high-water mark (`--high-water`, `HIGH_WATER`; off by default) is not a hint: it is the
   same outcome counted once, progress beyond the farthest point reached, so a sway earns
   nothing. The mark belongs to the life and is saved and loaded with it.
