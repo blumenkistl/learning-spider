@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .life import BLOCK, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
+from .life import BLOCK, HIGH_WATER, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
 from .senses import Senses
 
 
@@ -75,7 +75,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 genes=genes, backend=args.backend, senses=senses,
                 brain_path=None if continuing else args.brain,
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
-                yaw_pay=args.yaw_pay, window=args.window)
+                yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -132,6 +132,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "stance_pay": args.stance_pay,
         "yaw_pay": args.yaw_pay,
         "window": args.window,
+        "high_water": args.high_water,
         "per": senses.per,
         "blocks": rows,
     }
@@ -157,6 +158,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help=f"reward taken per radian turned in a moment (default {YAW_PAY}; 0 = off)")
     parser.add_argument("--window", type=int, default=PROGRESS_WINDOW,
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
+    parser.add_argument("--high-water", action="store_true", default=HIGH_WATER,
+                        help="pay new ground only: progress beyond the farthest point reached (default off)")
     parser.add_argument("--backend", default=None, help="auto (default), cpu, torch or torch:<device>")
     parser.add_argument("--json", type=Path, default=None, help="write the summary here")
     parser.add_argument("--quiet", action="store_true")

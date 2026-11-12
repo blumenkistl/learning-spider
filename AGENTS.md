@@ -31,6 +31,9 @@ without a page, for measurement.
   (off by default: no measured dose straightened the course without stopping the walk).
   Both are labelled as shaping, their readings are in the README, and `--stance-pay` and
   `--yaw-pay` in the nursery, or the same names in the server's environment, set them.
+  The high-water mark (`--high-water`, `HIGH_WATER`; off by default) is not a hint: it is the
+  same outcome counted once, progress beyond the farthest point reached, so a sway earns
+  nothing. The mark belongs to the life and is saved and loaded with it.
 - **Every outcome is delivered exactly once.** `Life.reward` is the last executed command's
   outcome not yet delivered. A refusal keeps it in the policy's `owed`; a policy switch moves it
   to the brain's `owed`; a save writes it to the sidecar; a load delivers it. Keep the tests in

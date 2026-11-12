@@ -5,7 +5,7 @@ import pytest
 
 from spider.body import JOINTS, Spider
 from spider.brain import SpiderBrain
-from spider.life import BLOCK, Life, pay
+from spider.life import BLOCK, PROGRESS_PAY, Life, pay
 
 
 class RecordingPolicy:
@@ -238,6 +238,61 @@ def test_save_carries_the_progress_window(tmp_path):
     assert list(again._progress) == list(life._progress)
     for _ in range(6):
         assert life.tick()["reward"] == again.tick()["reward"]
+
+
+def test_high_water_pays_new_ground_and_not_a_sway(tmp_path):
+    walk = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0, high_water=True)
+    walk.policy = HalfStrokePolicy()
+    plain = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0)
+    plain.policy = HalfStrokePolicy()
+    earned_walk, earned_plain = 0.0, 0.0
+    for _ in range(40):
+        earned_walk += walk.tick()["reward"]; earned_plain += plain.tick()["reward"]
+    assert earned_walk == pytest.approx(earned_plain) and earned_walk > 0.05   # every step is new ground
+    assert walk.mark == pytest.approx(walk.distance_forward) and plain.mark == 0.0
+
+    sway = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0, high_water=True)
+    sway.policy = SwayPolicy()
+    first, later = 0.0, 0.0
+    for i in range(120):
+        sway.tick()
+        if i < 60:
+            first += sway.reward
+        else:
+            later += sway.reward
+    assert abs(sway.distance_forward) < 0.01                 # it went nowhere
+    assert 0 < sway.mark < 0.02                              # the farthest it ever got, in its first moments
+    assert first <= PROGRESS_PAY * sway.mark + 1e-9          # and that is all the law ever paid
+    assert later == 0.0                                      # once settled, no sway reaches the mark
+
+
+def test_save_carries_the_high_water_mark(tmp_path):
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", high_water=True)
+    for _ in range(30):
+        life.tick()
+    assert life.mark >= life.distance_forward and life.describe()["reward"]["high_water"] is True
+    life.save()
+    state = json.loads((tmp_path / "spider.json").read_text())
+    assert state["mark"] == pytest.approx(life.mark)
+
+    # a mark ahead of the body: the ground up to it is paid for already
+    state["mark"] = life.distance_forward + 0.03
+    (tmp_path / "spider.json").write_text(json.dumps(state))
+    again = Life("brain", seed=99, pace=0, runs=tmp_path, backend="cpu", high_water=True)
+    again.load()
+    assert again.mark == pytest.approx(life.distance_forward + 0.03)
+    assert again.distance_forward == pytest.approx(life.distance_forward)
+    again.policy = HalfStrokePolicy()
+    paid = [again.tick()["reward"] for _ in range(8)]   # the stroke makes under 0.01 m a moment
+    assert paid[0] == paid[1] == 0.0 and sum(paid) > 0.0
+    assert sum(paid) <= PROGRESS_PAY * (again.distance_forward - life.distance_forward - 0.03) + 1e-3   # rounded pay
+    assert again.mark == pytest.approx(again.distance_forward)
+
+    del state["mark"]
+    (tmp_path / "spider.json").write_text(json.dumps(state))
+    older = Life("brain", seed=99, pace=0, runs=tmp_path, backend="cpu", high_water=True)
+    older.load()
+    assert older.mark == pytest.approx(older.distance_forward)   # a save without a mark starts it here
 
 
 def test_reset_starts_a_new_life_and_removes_the_save(tmp_path):

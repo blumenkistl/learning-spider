@@ -37,6 +37,10 @@ STANCE_PAY = 0.0        # taken per foot short of the floor: a hint, shaping, no
 PROGRESS_WINDOW = 1     # moments the progress term is averaged over: 1 pays each moment's own progress;
                         # a window pays the mean over the last N, which a sway that nets nothing cannot earn
                         # (README, "The rocking"); --window / PROGRESS_WINDOW set it
+HIGH_WATER = False      # pay only new ground: progress beyond the farthest point the body has reached along
+                        # its heading (its high-water mark). A sway earns on its forward half under the plain
+                        # law and nothing under this one; the mark is the life's, saved and loaded with it
+                        # (README, "The high-water mark"); --high-water / HIGH_WATER switch it on
 YAW_PAY = 0.0           # taken per radian turned in the moment: the hint to go straight, off (README: ignored at
                         # 0.1 and 1 a radian, obeyed at 5 by standing still); --yaw-pay / YAW_PAY switch it on
 BLOCK = 100             # moments per statistics block
@@ -91,8 +95,11 @@ class Life:
         stance_pay: float = STANCE_PAY,
         yaw_pay: float = YAW_PAY,
         window: int = PROGRESS_WINDOW,
+        high_water: bool = HIGH_WATER,
     ) -> None:
         self.name = name                        # the file stem under runs/
+        self.high_water = bool(high_water)      # the progress term pays new ground only
+        self.mark = 0.0                         # the farthest distance_forward reached: the high-water mark
         self.stance_pay = float(stance_pay)     # 0 switches the posture hint off
         self.yaw_pay = float(yaw_pay)           # 0 switches the course hint off
         if int(window) < 1:
@@ -136,12 +143,18 @@ class Life:
             self.reward = None
             before = (self.body.x, self.body.y)
             outcome = self.body.step(reading["commands"])
-            self._progress.append(outcome["progress"])
+            self.moments += 1
+            self.distance_forward += outcome["progress"]
+            if self.high_water:
+                # new ground only: a step back and the same step forward again earn nothing
+                gained = max(0.0, self.distance_forward - self.mark)
+                self.mark = max(self.mark, self.distance_forward)
+            else:
+                gained = outcome["progress"]
+            self._progress.append(gained)
             paid = sum(self._progress) / self.window    # short of a full window the missing moments count as zero
             self.reward = pay(paid, outcome["stance"], self.stance_pay,
                               outcome["turn"], self.yaw_pay)
-            self.moments += 1
-            self.distance_forward += outcome["progress"]
             self.turned += abs(outcome["turn"])
             if outcome["recentred"]:
                 self.recentres += 1
@@ -182,6 +195,7 @@ class Life:
             "speed": round(self.body.vx, 4),
             "omega": round(self.body.omega, 4),
             "distance_forward": round(self.distance_forward, 4),
+            "mark": round(self.mark, 4),
             "turned": round(self.turned, 3),
             "distance_net": round(float(np.hypot(self.body.x, self.body.y)), 4),
             "recentres": self.recentres,
@@ -341,6 +355,7 @@ class Life:
                 "moments": self.moments,
                 "refusals": brain.refusals,
                 "distance_forward": self.distance_forward,
+                "mark": self.mark,
                 "turned": self.turned,
                 "recentres": self.recentres,
                 "world": self.body.state_dict(),
@@ -371,6 +386,8 @@ class Life:
                 brain.refusals = int(state.get("refusals", 0))
                 self.moments = int(state["moments"])
                 self.distance_forward = float(state["distance_forward"])
+                # a life saved before the mark existed starts it where the body stands: no back pay
+                self.mark = float(state.get("mark", self.distance_forward))
                 self.turned = float(state.get("turned", 0.0))
                 self.recentres = int(state.get("recentres", 0))
                 self.body = Spider.restore(state["world"])
@@ -408,6 +425,7 @@ class Life:
             self.reward = None
             self.moments = 0
             self.distance_forward = 0.0
+            self.mark = 0.0
             self.turned = 0.0
             self.distance_net_start = (0.0, 0.0)
             self.recentres = 0
@@ -443,7 +461,8 @@ class Life:
             "height": HEIGHT,
             "reward": {"pay_per_metre": PROGRESS_PAY, "cap": PROGRESS_CAP,
                        "stance_floor": STANCE_FLOOR, "stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay,
-                       "window": self.window},
+                       "window": self.window, "high_water": self.high_water,
+                       "mark": round(self.mark, 4)},
             "brain": brain.describe() if brain is not None else None,
             "control": self.policy.describe() if self.policy is not brain else None,
             "runs": str(self.runs),
