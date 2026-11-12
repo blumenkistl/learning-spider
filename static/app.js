@@ -465,7 +465,7 @@ $('apply-law').addEventListener('click', async () => {
 
 function connect() {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-  ws.onopen = () => { $('link').textContent = 'live'; };
+  ws.onopen = () => { $('link').textContent = 'live'; if (described) refreshDescription(); };   // a restarted server may hold another life
   ws.onmessage = e => update(JSON.parse(e.data));
   ws.onclose = () => { $('link').textContent = 'reconnecting…'; setTimeout(connect, 1000); };
   ws.onerror = () => ws.close();
