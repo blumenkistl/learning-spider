@@ -61,6 +61,9 @@ FOUNDER: dict[str, Any] = {
     # chosen here, unmeasured against the arena's values:
     "modules": [64, 32],            # the arena: [48, 24] on 32 inputs; here 152 coded inputs
     "recall": False,                # 0.97.1 composes a recall memory by default; off for cost
+    "history_decays": [],           # no heard history: the brain hears only this moment (0.97.1 composes
+                                    # one only with recall); blocks of decays (--gene history_decays=0,0.7,0.95)
+                                    # would give it the moments before, a candidate gene for a gait
 }
 
 
@@ -106,6 +109,7 @@ def compose(
         working_memory_decay=float(g["trace_decay"]),
         efference_amplitude=float(g["efference_amplitude"]),
         efference_decay=float(g["efference_decay"]),
+        history_decays=tuple(float(d) for d in np.atleast_1d(g["history_decays"])),
         arousal=dict(g["arousal"]),
         scales={"sensory": float(g["sensory_scale"]), "trace": float(g["trace_scale"])},
         temperature=float(g["temperature"]),
