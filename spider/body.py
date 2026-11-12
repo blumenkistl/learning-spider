@@ -4,7 +4,7 @@ model that turns the motion of planted feet into motion of the body.
 Frame: z up, x forward, y left. Angles in radians, lengths in metres, one moment is ``DT``
 seconds. The sixteen joints are commanded only as ``decrease / hold / increase``; there is no
 controller between those commands and the joints. The body has two motor models, chosen at its
-birth and kept for its life (``motors``): under ``rate``, the founder, a command moves the
+birth and kept for its life (``motors``): under ``rate``, the founder until 2026-11-12, a command moves the
 joint by its rate for one moment and ``hold`` keeps it where it is; under ``target`` each joint
 is a position servo with a setpoint, a command sets the setpoint to that end of the joint's
 range, ``hold`` keeps the setpoint, and the joint moves toward it at the same rate. The servo
@@ -105,7 +105,9 @@ def supported(planted) -> bool:
 HIPS = np.array([(HIP_X[i % PER_SIDE], SIDE[i] * HIP_Y, 0.0) for i in range(LEGS)])
 SPLAY = np.array([HIP_SPLAY[i % PER_SIDE] for i in range(LEGS)])
 RATES = np.array([HIP_RATE, KNEE_RATE])
-MOTORS = ("rate", "target")             # the two motor models; rate is the founder
+MOTORS = ("rate", "target")             # the two motor models; rate was the founder
+DEFAULT_MOTORS = "target"               # the model a newborn body gets when nothing names one (rate until
+                                        # 2026-11-12; the README's "The position commands" measured the change)
 LOW = np.array([HIP_RANGE[0], KNEE_RANGE[0]])
 HIGH = np.array([HIP_RANGE[1], KNEE_RANGE[1]])
 
@@ -148,7 +150,7 @@ class Spider:
     planted_before: np.ndarray | None = None
     moments: int = 0
     recentres: int = 0
-    motors: str = "rate"                # the motor model, see the module docstring
+    motors: str = DEFAULT_MOTORS        # the motor model, see the module docstring
     targets: np.ndarray | None = None   # the servos' setpoints under target motors; unused under rate
 
     def __post_init__(self) -> None:

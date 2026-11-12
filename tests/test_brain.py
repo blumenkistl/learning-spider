@@ -223,3 +223,39 @@ def test_the_reward_learners_options_are_genes():
     tuned.live([rng.random(20)])
     for _ in range(5):
         tuned.live([rng.random(20)], reward=[0.1])
+
+
+def test_the_observation_codes_are_genes(tmp_path):
+    """``code``, ``learned_code`` and ``learned_code_fields`` (cadence docs/senses.md) are
+    genes: off, the founder reads the observation itself; on, the cortex reads a fixed sparse
+    code or a code region learned while the brain lives, and a life under one saves and
+    continues with it, its tables included."""
+    import numpy as np
+    from spider.brain import compose, genes_from_text
+    from spider.life import Life
+    from spider.senses import INPUTS
+    founder = compose(0, None, backend="cpu")
+    assert founder.describe()["layout"]["code"]["kind"] == "observation"
+    assert "code" not in founder.connectome.populations
+    fixed = compose(0, genes_from_text("code=64"), backend="cpu")
+    assert fixed.describe()["layout"]["code"]["kind"] == "code"
+    assert len(fixed.connectome.populations["sensory"]) == 64 and fixed.inputs == INPUTS
+    learned = compose(0, genes_from_text("learned_code=64 learned_code_fields=128,16,8"), backend="cpu")
+    assert learned.describe()["layout"]["code"]["kind"] == "learned"
+    assert len(learned.connectome.populations["code"]) == 64
+    assert learned.learned_code.field_units is not None and sum(learned.learned_code.field_units) == 64
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, genes=genes_from_text("learned_code=64"), backend="cpu")
+    for _ in range(12):
+        life.tick()
+    assert life.policy.refusals == 0 and life.brain.brain.learned_code.work["updates"] > 0
+    dictionary = np.array(life.brain.brain.learned_code.dictionary, copy=True)
+    life.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    assert again.load()["custody"] == "kept" and again.genes == {"learned_code": 64}
+    assert again.brain.brain.describe()["layout"]["code"]["kind"] == "learned"
+    assert np.array_equal(np.asarray(again.brain.brain.learned_code.dictionary), dictionary)
+    for _ in range(6):
+        assert again.tick()["commands"] == life.tick()["commands"]
+    assert again.policy.refusals == 0
+    payload = again.spider()                                   # the brain view names the code region
+    assert "code" in payload["classes"] and payload["labels"]["code"] == "code"

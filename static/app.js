@@ -222,13 +222,15 @@ function describedBy(d) {
     if (field.type === 'checkbox') field.checked = !!r[k]; else field.value = r[k];
   }
   $('birth-seed').value = d.seed;
-  $('birth-motors').value = d.motors || 'rate';
+  $('birth-motors').value = d.motors || 'target';
   $('birth-setpoints').checked = !!d.setpoints;
   const genes = { ...(d.genes || {}) };
   $('birth-hold').value = genes.hold == null ? '' : genes.hold;
   $('birth-entropy').value = genes.entropy == null ? 0 : genes.entropy;
   $('birth-maturity').checked = !!genes.maturity;
-  for (const k of ['hold', 'entropy', 'maturity']) delete genes[k];
+  $('birth-code').value = genes.code == null ? '' : genes.code;
+  $('birth-learned-code').value = genes.learned_code == null ? '' : genes.learned_code;
+  for (const k of ['hold', 'entropy', 'maturity', 'code', 'learned_code']) delete genes[k];
   $('birth-genes').value = geneWords(genes);
   $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
 }
@@ -413,11 +415,13 @@ function heat(v) {
 // Reset gives birth to what the settings name; genes are composed once, so this is the one
 // place they are set. The page reloads on the new life: a reset is a new life, not a new frame.
 function birth() {
-  // the three reward-learner genes have fields of their own; the rest is the text, in the nursery's words
+  // the reward learner's three options and the two codes have fields of their own; the rest is the text, in the nursery's words
   const words = [$('birth-genes').value.trim()];
   if ($('birth-hold').value !== '') words.push('hold=' + Number($('birth-hold').value));
   if (Number($('birth-entropy').value) > 0) words.push('entropy=' + Number($('birth-entropy').value));
   if ($('birth-maturity').checked) words.push('maturity=true');
+  if (Number($('birth-code').value) > 0) words.push('code=' + Math.round(Number($('birth-code').value)));
+  if (Number($('birth-learned-code').value) > 0) words.push('learned_code=' + Math.round(Number($('birth-learned-code').value)));
   return { seed: Number($('birth-seed').value), motors: $('birth-motors').value,
            setpoints: $('birth-setpoints').checked, genes: words.filter(Boolean).join(' ') };
 }

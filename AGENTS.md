@@ -27,7 +27,7 @@ without a page, for measurement.
   label it as a control. The body's own stops (the hip and knee ranges, the stop that keeps a
   side's neighbouring legs from crossing) are the world's, not a controller: they bound what
   the brain's answer can do, they never choose it. The body has two motor models
-  (`--motors`, `MOTORS`): `rate`, the founder, where a command moves the joint for one moment;
+  (`--motors`, `MOTORS`): `rate`, the founder until 2026-11-12, where a command moves the joint for one moment;
   and `target`, where each joint is a position servo whose setpoint a command sets to an end
   of the joint's range and `hold` keeps. The servo chooses nothing and knows no gait, but it
   is a different model, named in every reading made under it (the README's "The position

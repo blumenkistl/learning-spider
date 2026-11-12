@@ -21,7 +21,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .body import MOTORS
+from .body import DEFAULT_MOTORS, MOTORS
 from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
 from .life import BACKWARD_PAY, BLOCK, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
 from .senses import PER, Senses
@@ -135,8 +135,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=BACKWARD_PAY,
                         help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
-    parser.add_argument("--motors", choices=MOTORS, default="rate",
-                        help="the body's motor model: rate (the founder) or target, position servos (default rate)")
+    parser.add_argument("--motors", choices=MOTORS, default=DEFAULT_MOTORS,
+                        help=f"the body's motor model: rate (the founder until 2026-11-12, a command moves the joint for one "
+                             f"moment) or target, position servos (default {DEFAULT_MOTORS})")
     parser.add_argument("--backend", default=None, help="auto (default), cpu, torch or torch:<device>")
     parser.add_argument("--json", type=Path, default=None, help="write the summary here")
     parser.add_argument("--quiet", action="store_true")

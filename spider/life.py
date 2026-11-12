@@ -25,7 +25,7 @@ from typing import Any
 
 import numpy as np
 
-from .body import DT, HEIGHT, HIPS, JOINTS, LEGS, MOTORS, Spider
+from .body import DEFAULT_MOTORS, DT, HEIGHT, HIPS, JOINTS, LEGS, MOTORS, Spider
 from .brain import FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, gene_words, genes_from_text, make_policy
 from .senses import DEFAULT as DEFAULT_SENSES, Senses
 
@@ -147,7 +147,7 @@ class Life:
         window: int = PROGRESS_WINDOW,
         high_water: bool = HIGH_WATER,
         pay_per_metre: float = PROGRESS_PAY,
-        motors: str = "rate",
+        motors: str = DEFAULT_MOTORS,
         backward_pay: float = BACKWARD_PAY,
         old_ground: float = OLD_GROUND,
     ) -> None:

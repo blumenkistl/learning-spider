@@ -73,6 +73,14 @@ FOUNDER: dict[str, Any] = {
     "maturity": False,              # the slow use of plasticity that lowers the actor's step as it is spent
     "maturity_scale": 10.0,         # the use at which the step factor is 0.5 (with maturity only)
     "maturity_recovery": 200000,    # moments of the use's time constant (with maturity only)
+    # how the brain reads its senses (cadence docs/senses.md), the founder reading the coded
+    # observation itself; measured in the README's "The observation codes":
+    "code": None,                   # a fixed random sparse code of that many units (at least 24) that the
+                                    # cortex reads and the memories key on, in place of the 152 inputs
+    "learned_code": None,           # a code region of that many units between the senses and the first
+                                    # module, learned by local rules while the brain lives; costs 2-3x a moment
+    "learned_code_fields": None,    # with learned_code: the widths of the observation's channels, each
+                                    # read by its own units (128,16,8: the angles, speed and yaw, the flags)
 }
 
 
@@ -186,6 +194,10 @@ def compose(
         **({"actor_hold": float(g["hold"])} if g["hold"] is not None else {}),
         **({"maturity": True, "maturity_scale": float(g["maturity_scale"]),
             "maturity_recovery": int(g["maturity_recovery"])} if g["maturity"] else {}),
+        **({"code": int(g["code"])} if g["code"] is not None else {}),
+        **({"learned_code": int(g["learned_code"])} if g["learned_code"] is not None else {}),
+        **({"learned_code_fields": tuple(int(w) for w in np.atleast_1d(g["learned_code_fields"]))}
+           if g["learned_code_fields"] is not None else {}),
         **where,
     )
 
@@ -223,8 +235,10 @@ LEARNING_GAIN = 40.0      # the view's learning formula: level = sqrt(min(1, gai
 LEARNING_FLOOR = 1e-9
 AXES = np.array([1.0, 0.8, 0.7])      # the ellipsoid's semi-axes: x forward, the longest spans 2.0
 FIBRE_NODES = 3                       # segments per synapse: a quadratic curve sampled in thirds
-_LABELS = {"sensory": "senses", "association": "association", "prefrontal": "prefrontal", "motor": "motor"}
-_COLORS = {"sensory": [90, 209, 255], "association": [255, 214, 102], "prefrontal": [90, 220, 190],
+_LABELS = {"sensory": "senses", "code": "code", "association": "association", "prefrontal": "prefrontal",
+           "motor": "motor"}
+_COLORS = {"sensory": [90, 209, 255], "code": [170, 150, 255], "association": [255, 214, 102],
+           "prefrontal": [90, 220, 190],
            "motor": [210, 255, 120]}
 _MODULE_COLOR = [103, 231, 142]
 _GOLDEN = np.pi * (3.0 - np.sqrt(5.0))
@@ -281,6 +295,8 @@ def connectome_layout(brain: Brain) -> np.ndarray:
         m = len(idx)
         if name == "sensory":
             unit = _band(m, -1.0, 0.45, 1.0)                     # the rear surface
+        elif name == "code":                                     # the learned code: a shell just inside the senses
+            unit = _band(m, -0.95, 0.48, 0.88)
         elif name in modules:                                    # shells inside the senses
             k = modules.index(name)
             unit = _band(m, -0.9, 0.5, 0.74 - 0.12 * k)

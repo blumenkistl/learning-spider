@@ -67,7 +67,9 @@ the life, so a continued life keeps the law it was last paid under, whatever fla
 was started with (a note says which). **next birth, on Reset** holds what Reset gives birth
 to: the seed, the motor model, whether the servos' setpoints are sensed (target motors only),
 the reward learner's three options from cadence's docs/reward.md as fields of their own (the
-actor's `hold`, its `entropy`, `maturity`; measured in "The reward learner's options") and
+actor's `hold`, its `entropy`, `maturity`; measured in "The reward learner's options"), the two
+observation codes of cadence's docs/senses.md as fields too (a fixed sparse `code`, a
+`learned code` region; measured in "The observation codes") and
 the newborn's other genes in the nursery's words (`gamma=0.99 eta_critic=20 arousal.need=0
 modules=48,24 recall=true`; empty is the founder). Genes are composed once, at birth, which is
 why they change nowhere else; the live brain's genes and seed are shown under the field. The
@@ -87,7 +89,7 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--pay-per-metre` (40) and `--backward-pay` (0), the two hints, the window, the high-water
 mark and its leak, the gain and
 the backward charge described under [the reward](#the-reward-spiderlifepy), `--motors`
-(`rate`) for a newborn's body and `--setpoints` (off) to sense the servos' setpoints too. An
+(`target` since 2026-11-12, `rate` before) for a newborn's body and `--setpoints` (off) to sense the servos' setpoints too. An
 environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
 `AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `OLD_GROUND`, `PAY_PER_METRE`,
 `BACKWARD_PAY`, `MOTORS`, `SETPOINTS`) sets a flag's
@@ -179,14 +181,18 @@ chosen so that sliding and swinging do not pay and a gait does.
 
 The joints take the brain's three answers in one of two motor models, the body's for its life
 (`--motors`, `MOTORS` for the server; a saved life keeps its own and a flag that differs is
-noted, not applied). Under `rate`, the founder, `decrease` and `increase` move the joint by its
+noted, not applied). Under `rate`, the founder until 2026-11-12, `decrease` and `increase` move the joint by its
 rate for the moment and `hold` leaves it where it is: a full swing needs the same answer
 sixteen moments running. Under `target` each joint is a position servo: `decrease` sets its
 setpoint to the low end of the range, `increase` to the high end, `hold` keeps the setpoint,
 and the joint travels toward it at the same rate, so one answer followed by holds drives the
-swing. The servo chooses nothing and knows no gait, but it is a different model, not the
-founder's, named in every reading made under it; "The position commands" below has them. The
-page's `motors` row shows which model the body has.
+swing. The servo chooses nothing and knows no gait, but it is a different model from the
+founder's, named in every reading made under it; "The position commands" below has them.
+Since 2026-11-12 `target` is the default of a newborn body (`DEFAULT_MOTORS` in `spider/body.py`,
+the nursery's and the server's `--motors`, the page's next birth), because it is the model under
+which every life that walked farther than a metre was raised; `--motors rate` names the
+founder's. The readings above that moment are under `rate` unless they say otherwise, and
+every reading since names its model. The page's `motors` row shows which model the body has.
 
 ### The senses (`spider/senses.py`)
 
@@ -266,12 +272,14 @@ was chosen by that comparison.
 | actor eta / bias / lam / gamma / critic | 0.03 / 0.003 / 0.6 / 0.95 / 5 | Robot Arena founder |
 | actor hold / entropy | off (`hold=none`) / 0 | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
 | maturity (scale, recovery) | off (10, 200,000) | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
+| observation code / learned code (fields) | off / off (none): the cortex reads the coded senses themselves | cadence docs/senses.md, the library's founder values; measured in "The observation codes" |
 | arousal | threshold 0.2, decay 0.9, tolerance 2, floor 0.1, fast 0.05, slow 0.005, heat 2, youth 300, value surprise 1, need 0.05 | Robot Arena founder |
 
 328 neurons, 22,041 parameters. Candidate genes are set on the nursery with
 `--gene name=value` (`--gene modules=48,24`, `--gene arousal.need=0`, `--gene recall=true`,
 `--gene efference_amplitude=3`, `--gene history_decays=0,0.7,0.95`, `--gene hold=0.9`,
-`--gene entropy=0.1`, `--gene maturity=true`), `--per N` for the
+`--gene entropy=0.1`, `--gene maturity=true`, `--gene code=64`, `--gene learned_code=64`,
+`--gene learned_code_fields=128,16,8`), `--per N` for the
 population code and `--setpoints` for the servo setpoints as readings.
 
 ### Backend
@@ -297,8 +305,8 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --high-water --old-ground 0.2  # and old ground a fifth
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --pay-per-metre 10  # a quarter of the gain, the same cap
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --backward-pay 1   # charge backward as forward pays
-.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors target    # position servos, a different model
-.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors target --setpoints  # and the setpoints sensed
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors rate      # the founder's rate motors (the default until 2026-11-12)
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --setpoints        # the servos' setpoints sensed too
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
@@ -1369,12 +1377,55 @@ and it is the one gene whose next reading is worth seeds 3–5, a dose of 0.03 a
 the stance term with it (the calm cycles stand on five feet already). Entropy 0.1 costs
 3.7 ms a moment aroused, 2.0 calm; hold 3.3–3.8; maturity 4.3.
 
+**The observation codes.** Cadence's docs/senses.md offers a vector brain two ways to read
+its senses other than the observation itself, both off in the founder and genes here:
+`--gene code=U`, a fixed random sparse code of U units (one in ten active, 24 of 64) that the
+cortex reads in place of the 152 coded inputs and the memories key on; and
+`--gene learned_code=U`, a code region of U units between the senses and the first module,
+learned by local rules while the brain lives, on which the cortex computes and the memories
+key (joined to the observation's own identity), with `--gene learned_code_fields=128,16,8`
+giving the joint angles, the speed and yaw rate, and the planted flags units of their own.
+(The doc's image inputs, learned receptive fields and ports are for a screen; this body has
+none.) Servos, gamma 0.99, seeds 0–2, 30,000 moments, 64 units each (the docs' width);
+frozen copies:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| servos, gamma 0.99, code 64 | +0.129 (+0.02; 3.8 → 3.9; 0.98; 0.026) | +0.841 (+0.11; 3.3 → 3.7; 0.99; 0.020) | −0.130 (+0.14; 3.9 → 3.9; 0.99; 0.020) |
+| servos, gamma 0.99, learned code 64 | +0.056 (−0.14; 3.2 → 4.4; 1.00; 0.019) | +0.863 (0.00; 2.7 → 3.5; 0.99; 0.024) | +0.779 (0.00; 3.3 → 4.7; 0.79; 0.034) |
+| servos, gamma 0.99, learned code 64, fields 128,16,8 | −0.474 (+0.03; 3.2 → 1.8; 1.00; 0.009) | +0.335 (+0.11; 2.8 → 2.8; 0.99; 0.015) | +0.424 (+0.09; 3.6 → 4.0; 0.69; 0.040) |
+| frozen copies, 3000 moments (code / learned / learned with fields) | 0.155 / 0.151 / 0.145 | 0.153 / 0.152 / 0.149 | 0.151 / 0.151 / 0.151 |
+| learned code 64, per 5000 moments, 0–30,000 | +0.15 +0.11 0.00 −0.01 −0.05 −0.14 | +0.69 −0.05 +0.17 0.00 +0.05 0.00 | +0.63 +0.21 +0.04 −0.05 −0.05 0.00 |
+
+**Reading:** neither code walks, and both read less than the senses themselves: every life
+under a code is below its seed's baseline (code 64 +0.13 / +0.84 / −0.13, the learned code
++0.06 / +0.86 / +0.78 against +1.69 / +0.94 / +0.67), the fields make it worse (−0.47 / +0.34
+/ +0.42), and the one thing the codes change is the arousal: the baseline's seed 0 fell calm
+into its posture by 5000 moments, where under every code every seed stays aroused for the
+whole life (0.98–1.00 in the last 5000, the learned code's seed 2 at 0.69–0.79) and sways,
+about half the blocks positive (141–175 of 300) and 75–183 rad turned. The fixed code's
+first 5000 moments are the baseline's first block or less; the learned code's are its best
+(+0.69 and +0.63 on seeds 1 and 2, the baseline's +0.22 and +0.33 there), and then it stops:
+the region keeps learning (20,000–29,000 steps on 30,000 moments) and the code it settles on
+is dense on the life's own path (20–37 of 64 units lit, a newborn's 17–26 on the same poses)
+and dark off it (its thresholds rose from 0.1 to 3.3–4.2, so a pose the life never took lights
+0–5 units), the docs' behaviour, and what it learned to tell apart is not what the reward
+asked for. The copies walk 0.15, the greedy answer's. The fixed code halves the parameters
+(12,097 against 22,041) at 3.9–4.3 ms a moment; the learned code costs 8.6–10.0 ms a moment
+(24,025 parameters, 392 neurons) against 3.3 for the founder. The founder stays: the senses
+themselves, read by the cortex at scale 4. What a code would be for, a world whose
+observation is wider than the cortex should read or whose members share contexts the lesson
+should carry across, is not this world, whose 152 inputs are already a code (the population
+code, "The senses").
+
 What a next step would measure, each against the same controls and on the eight-legged body:
 the finer code with the stance term over a longer life, the one gene that moved the first
 block; and a course hint on the net heading drift over a
 window rather than the unsigned turn. The horizon past 0.99, the setpoints as senses, the
-leaking mark, the recall memory, the temperature, the actor's hold and maturity are measured
-above and change nothing after the first block; the critic's rate at 20 held one seed's slow
+leaking mark, the recall memory, the temperature, the actor's hold and maturity, and the
+observation codes (fixed and learned) are measured above and change nothing after the first
+block, the codes losing it; the critic's rate at 20 held one seed's slow
 rhythm for 60,000 moments and is worth seeds 3–5 and a dose between 5 and 20; the entropy
 term at 0.1 walked two seeds of three 4–5 m and one of them every block of 60,000 moments,
 in calm cycles the brain repeats to the bit (a jitter, a one-legged row on a circle), and is

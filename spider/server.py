@@ -9,7 +9,7 @@ The flags are the nursery's (``python server.py --help``). Each has an environme
 of the same meaning that sets its default: HOST (127.0.0.1), PORT (8080), POLICY (brain),
 SEED (0), PACE (20 moments/s), BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs),
 AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), OLD_GROUND (0), PAY_PER_METRE (40)
-and BACKWARD_PAY (0), the reward's settings, MOTORS (rate) for a newborn's body and SETPOINTS (0) to
+and BACKWARD_PAY (0), the reward's settings, MOTORS (target) for a newborn's body and SETPOINTS (0) to
 sense the servos' setpoints too. A saved life in RUNS is continued, with its own genes, seed,
 senses, motors and law; shutdown saves it. The page's settings change the law on the living
 brain (control ``law``) and name the next birth (control ``reset`` with a value).
@@ -26,7 +26,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .body import MOTORS
+from .body import DEFAULT_MOTORS, MOTORS
 from .life import BACKWARD_PAY, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
 from .nursery import genes_from, parse_gene
 from .senses import PER, Senses
@@ -142,8 +142,9 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=float(env("BACKWARD_PAY", BACKWARD_PAY)),
                         help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
-    parser.add_argument("--motors", choices=MOTORS, default=env("MOTORS", "rate"),
-                        help="the body's motor model for a newborn: rate (the founder) or target, position servos")
+    parser.add_argument("--motors", choices=MOTORS, default=env("MOTORS", DEFAULT_MOTORS),
+                        help=f"the body's motor model for a newborn: rate (a command moves the joint for one moment) "
+                             f"or target, position servos (default {DEFAULT_MOTORS})")
     return parser.parse_args(argv)
 
 

@@ -117,7 +117,7 @@ def legs_cross(spider, i, j):
 
 def test_neighbouring_legs_stop_against_each_other():
     """Leg 1 swings forward and leg 0 back as far as they can: they meet at the stop, never cross."""
-    spider = Spider()
+    spider = Spider(motors="rate")                              # a command a moment, as the test steps it
     cmd = hold()
     cmd[0] = 0                             # leg 0's hip back
     cmd[2] = 2                             # leg 1's hip forward
@@ -130,7 +130,7 @@ def test_neighbouring_legs_stop_against_each_other():
     assert spider.joints[0, 0] > HIP_RANGE[0] and spider.joints[1, 0] < HIP_RANGE[1]   # neither reached its range
 
     # the stop is a stop, not a wall: the leg behind may turn forward until it meets the one in front
-    spider = Spider()
+    spider = Spider(motors="rate")
     cmd = hold()
     cmd[2] = 2
     for _ in range(30):
@@ -184,7 +184,7 @@ def test_left_stroke_turns_right_and_moves_forward():
 
 
 def test_closed_cycle_with_all_feet_planted_nets_nothing():
-    spider = Spider()
+    spider = Spider(motors="rate")                              # the cycle is commanded moment by moment
     for _ in range(4):
         spider.step(command(hips=0))
     for _ in range(4):
@@ -326,8 +326,9 @@ def test_target_motors_are_servos_with_a_kept_setpoint():
     yaw = SPLAY + spider.joints[:, 0]
     assert yaw[1] - yaw[0] == pytest.approx(LEG_CONVERGE)
 
-    # the founder's rate motors are unchanged by the model's existence
-    rate = Spider()
+    # the founder's rate motors (the default until 2026-11-12) are unchanged by the model's existence
+    rate = Spider(motors="rate")
+    assert Spider().motors == "target"                           # the default since
     cmd = hold(); cmd[2] = 2
     rate.step(cmd)
     rate.step(hold())

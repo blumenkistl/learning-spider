@@ -346,7 +346,7 @@ def test_a_saved_life_keeps_its_motor_model(tmp_path):
     for _ in range(12):
         life.tick()
     life.save()
-    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")       # asked for rate motors
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="rate")   # asked for rate motors
     assert again.load()["custody"] == "kept"
     assert again.body.motors == "target" and again.motors == "target"          # the saved life keeps its own
     assert any("target motors" in n for n in again.notes)
@@ -363,7 +363,7 @@ def test_the_setpoint_senses_need_target_motors_and_are_continued(tmp_path):
     from spider.senses import Senses
 
     with pytest.raises(ValueError):
-        Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", senses=Senses(setpoints=True))
+        Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="rate", senses=Senses(setpoints=True))
     life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target", senses=Senses(setpoints=True))
     assert life.describe()["setpoints"] is True and life.describe()["inputs"] == 8 * 34 + 8
     for _ in range(12):
@@ -429,7 +429,7 @@ def test_the_law_changes_live_and_is_noted_counted_and_saved(tmp_path):
 
 
 def test_reset_takes_a_birth(tmp_path):
-    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", motors="rate")
     life.tick()
     with pytest.raises(ValueError):
         life.reset({"setpoints": True})                          # setpoints need target motors
@@ -453,12 +453,12 @@ def test_reset_takes_a_birth(tmp_path):
 def test_a_saved_life_keeps_its_seed_and_senses(tmp_path):
     from spider.senses import Senses
 
-    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", motors="rate")
     life.control("reset", {"seed": 3, "motors": "target", "setpoints": True, "genes": "gamma=0.99"})
     for _ in range(4):
         life.tick()
     life.save()
-    plain = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")      # the flags name another birth
+    plain = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", motors="rate")   # the flags name another birth
     assert plain.load()["custody"] == "kept"
     assert plain.seed == 3 and plain.motors == "target" and plain.senses.setpoints is True and plain.genes == {"gamma": 0.99}
     assert plain.describe()["inputs"] == life.describe()["inputs"]
