@@ -8,9 +8,11 @@ WebSocket at the life's pace (at most 30 frames a second) and takes controls as 
 The flags are the nursery's (``python server.py --help``). Each has an environment variable
 of the same meaning that sets its default: HOST (127.0.0.1), PORT (8080), POLICY (brain),
 SEED (0), PACE (20 moments/s), BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs),
-AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), PAY_PER_METRE (40)
-and BACKWARD_PAY (0), the reward's settings, and MOTORS (rate) for a newborn's body. A saved life in RUNS is continued, with its own genes; shutdown
-saves it.
+AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), OLD_GROUND (0), PAY_PER_METRE (40)
+and BACKWARD_PAY (0), the reward's settings, MOTORS (rate) for a newborn's body and SETPOINTS (0) to
+sense the servos' setpoints too. A saved life in RUNS is continued, with its own genes, seed,
+senses, motors and law; shutdown saves it. The page's settings change the law on the living
+brain (control ``law``) and name the next birth (control ``reset`` with a value).
 """
 
 from __future__ import annotations
@@ -25,9 +27,9 @@ from pathlib import Path
 from aiohttp import web
 
 from .body import MOTORS
-from .life import BACKWARD_PAY, HIGH_WATER, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
+from .life import BACKWARD_PAY, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
 from .nursery import genes_from, parse_gene
-from .senses import Senses
+from .senses import PER, Senses
 
 STATIC = Path(__file__).resolve().parent.parent / "static"
 FRAME_SECONDS = 1.0 / 30.0
@@ -124,6 +126,8 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--gene", type=parse_gene, action="append", default=[],
                         help="name=value for a newborn brain, e.g. modules=48,24 (repeatable; a saved brain keeps its own)")
     parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
+    parser.add_argument("--setpoints", action="store_true", default=_flag("SETPOINTS", False),
+                        help="sense the servos' setpoints too, for a newborn (needs --motors target)")
     parser.add_argument("--stance-pay", type=float, default=float(env("STANCE_PAY", STANCE_PAY)),
                         help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
     parser.add_argument("--yaw-pay", type=float, default=float(env("YAW_PAY", YAW_PAY)),
@@ -132,6 +136,8 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--high-water", action="store_true", default=_flag("HIGH_WATER", HIGH_WATER),
                         help="pay new ground only: progress beyond the farthest point reached (default off)")
+    parser.add_argument("--old-ground", type=float, default=float(env("OLD_GROUND", OLD_GROUND)),
+                        help=f"under --high-water, the share paid for progress on old ground, 0 to 1 (default {OLD_GROUND})")
     parser.add_argument("--pay-per-metre", type=float, default=float(env("PAY_PER_METRE", PROGRESS_PAY)),
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=float(env("BACKWARD_PAY", BACKWARD_PAY)),
@@ -150,11 +156,12 @@ def life_from(args: argparse.Namespace) -> Life:
         runs=args.runs,
         genes=genes_from(args.gene) or None,
         backend=args.backend,
-        senses=Senses(per=args.per) if args.per else Senses(),
+        senses=Senses(per=args.per or PER, setpoints=args.setpoints),
         stance_pay=args.stance_pay,
         yaw_pay=args.yaw_pay,
         window=args.window,
         high_water=args.high_water,
+        old_ground=args.old_ground,
         pay_per_metre=args.pay_per_metre,
         motors=args.motors,
         backward_pay=args.backward_pay,

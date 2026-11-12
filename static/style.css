@@ -15,6 +15,15 @@ button { background: #1b2230; color: var(--ink); border: 1px solid #2d3647; bord
 button:hover { border-color: var(--accent); }
 button.danger { border-color: #5a2a2a; color: #ff9b9b; } button.danger:hover { border-color: #ff6b6b; }
 button.on { background: #203a4a; border-color: var(--accent); }
+#settings { margin-top: 8px; font-size: 12px; } #settings summary { cursor: pointer; font-size: 15px; }
+.settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 4px 12px; margin-top: 4px; }
+.settings .col { display: flex; flex-direction: column; gap: 3px; }
+.settings .col > .small { margin: 0 0 2px; color: var(--ink); }
+.settings label { display: flex; justify-content: space-between; align-items: center; gap: 6px; color: var(--dim); white-space: nowrap; }
+.settings input[type=number], .settings input[type=text], .settings select { width: 60px; min-width: 0; background: #1b2230; color: var(--ink); border: 1px solid #2d3647; border-radius: 4px; padding: 2px 5px; font: inherit; }
+.settings input[type=text] { flex: 1; width: auto; }
+.settings .col > .small:last-child { white-space: normal; }
+.settings button { align-self: flex-start; margin-top: 3px; font-size: 12px; padding: 2px 8px; }
 #learning { margin-top: 10px; }
 #learning .scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
 #learning .scale .v { color: var(--ink); }

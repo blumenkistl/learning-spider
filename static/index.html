@@ -15,21 +15,21 @@
   <aside id="hud">
     <h1>Learning Spider <span id="policy" class="tag">—</span></h1>
     <div class="grid">
-      <div><span class="k">moment</span><span class="v" id="moments">0</span></div>
-      <div><span class="k">mode</span><span class="v" id="mode">idle</span></div>
-      <div><span class="k">forward</span><span class="v" id="forward">0.000 m</span></div>
-      <div><span class="k">from origin</span><span class="v" id="net">0.000 m</span></div>
-      <div><span class="k">speed</span><span class="v" id="speed">0.000 m/s</span></div>
-      <div><span class="k">reward</span><span class="v" id="reward">—</span></div>
+      <div title="moments lived by this brain: one moment is 50 ms of the body's clock, one answer of the brain, one outcome of the world"><span class="k">moment</span><span class="v" id="moments">0</span></div>
+      <div title="the brain's mode this moment: aroused (it learns), routine (greedy, learning nothing) or refused (no answer, the outcome stays owed)"><span class="k">mode</span><span class="v" id="mode">idle</span></div>
+      <div title="distance travelled along the body's own heading, summed over the life: what the reward pays"><span class="k">forward</span><span class="v" id="forward">0.000 m</span></div>
+      <div title="straight-line distance from the world's origin, and how often the body was recentred"><span class="k">from origin</span><span class="v" id="net">0.000 m</span></div>
+      <div title="forward speed this moment; a full stroke is 0.2 m/s"><span class="k">speed</span><span class="v" id="speed">0.000 m/s</span></div>
+      <div title="the outcome of the last command, delivered at the next moment; owed is an outcome not yet delivered (a refusal or a control keeps it)"><span class="k">reward</span><span class="v" id="reward">—</span></div>
       <div title="the reward law this life is paid under: progress each moment, or the mean of a window of moments; the high-water mark pays new ground only; stance and yaw are shaping terms"><span class="k">law</span><span class="v" id="law">—</span></div>
       <div title="the body's motor model: rate (the founder: a command moves the joint for one moment) or target (position servos: a command sets a joint's setpoint to an end of its range, hold keeps it)"><span class="k">motors</span><span class="v" id="motors">—</span></div>
-      <div><span class="k">level / want</span><span class="v" id="arousal">—</span></div>
-      <div><span class="k">sweeps</span><span class="v" id="sweeps">—</span></div>
-      <div><span class="k">ms / moment</span><span class="v" id="ms">—</span></div>
-      <div><span class="k">pace</span><span class="v" id="pace">—</span></div>
-      <div><span class="k">feet planted</span><span class="v" id="stance">—</span></div>
-      <div><span class="k">turned</span><span class="v" id="turned">—</span></div>
-      <div><span class="k">refusals</span><span class="v" id="refusals">0</span></div>
+      <div title="the arousal law: level is the arousal of the moment, want the need not met; above the threshold the brain is aroused and learns"><span class="k">level / want</span><span class="v" id="arousal">—</span></div>
+      <div title="settle sweeps the brain took to answer this moment, and how many of them were learning sweeps"><span class="k">sweeps</span><span class="v" id="sweeps">—</span></div>
+      <div title="wall-clock cost of a moment on this machine: a residual of this implementation, not energy"><span class="k">ms / moment</span><span class="v" id="ms">—</span></div>
+      <div title="moments a second the loop runs at; 20 is the body's own clock, 0 as fast as the machine goes"><span class="k">pace</span><span class="v" id="pace">—</span></div>
+      <div title="feet planted through the whole moment, of eight; the stance hint pays per foot short of four"><span class="k">feet planted</span><span class="v" id="stance">—</span></div>
+      <div title="unsigned radians the heading has turned over the life, and the turn rate of the moment; the yaw hint pays per radian"><span class="k">turned</span><span class="v" id="turned">—</span></div>
+      <div title="moments the brain gave no answer (its settle did not converge): the joints hold and the outcome stays owed"><span class="k">refusals</span><span class="v" id="refusals">0</span></div>
     </div>
     <div id="learning" title="share of the last 1000 moments the brain spent aroused, which is when it learns">
       <div class="scale"><span>Brain Stall</span><span class="v" id="learning-pct">—</span><span>Learning</span></div>
@@ -40,17 +40,17 @@
     <p id="notes" class="small"></p>
 
     <div class="buttons">
-      <button data-op="pause" id="pause">Pause</button>
-      <button data-op="recentre">Recentre</button>
-      <button data-op="save">Save</button>
-      <button data-op="load">Load</button>
-      <button data-op="reset" id="reset" class="danger">Reset</button>
+      <button data-op="pause" id="pause" title="stop and resume the loop; nothing is lost, the pending outcome stays owed">Pause</button>
+      <button data-op="recentre" title="the body returns to the origin with its pose and heading; nothing else changes">Recentre</button>
+      <button data-op="save" title="write the brain, its pending outcome and the world to runs/ (the server also autosaves and saves at shutdown)">Save</button>
+      <button data-op="load" title="continue the saved life from runs/, with its world, its law and the outcome it had not yet received">Load</button>
+      <button data-op="reset" id="reset" class="danger" title="the one deliberate end of a life: after confirmation the saved life is deleted and a newborn brain of the birth named under settings takes the body">Reset</button>
     </div>
     <div class="buttons">
       <span class="k">policy</span>
-      <button data-op="policy" data-value="brain">brain</button>
-      <button data-op="policy" data-value="random">random</button>
-      <button data-op="policy" data-value="frozen">frozen copy</button>
+      <button data-op="policy" data-value="brain" title="the living brain commands the body and learns">brain</button>
+      <button data-op="policy" data-value="random" title="the baseline: a uniformly random command per joint; the brain waits with its outcome owed and nothing is saved">random</button>
+      <button data-op="policy" data-value="frozen" title="a save/load copy of the live brain that answers greedily and never learns: the control for &quot;kept learning&quot;; nothing is saved">frozen copy</button>
     </div>
     <div class="buttons">
       <span class="k">pace</span>
@@ -59,6 +59,33 @@
       <button data-op="pace" data-value="100">5×</button>
       <button data-op="pace" data-value="0">max</button>
     </div>
+    <details id="settings">
+      <summary class="k">settings</summary>
+      <div class="settings">
+        <div class="col">
+          <p class="small" title="the reward law, changed on the living brain from the next moment on; the outcome already earned is delivered as earned. A life whose law changes is a schedule, not a life under one law: every change is noted, counted on the law line, reported as law_changes and saved with the life. Hover a setting for what it does">law, live</p>
+          <label title="shaping, not an outcome: reward taken per foot short of four planted through the moment. 0 is off and the shipped law; 0.1 is the measured dose (obeyed; the body stands and walked farthest under it), 0.02 is ignored"><span>stance pay</span><input id="law-stance_pay" type="number" step="0.05" min="0"></label>
+          <label title="shaping, not an outcome: reward taken per radian the heading turns in a moment. 0 is off and the shipped law; no measured dose (0.1, 1 and 5 a radian) straightened the course without stopping the walk"><span>yaw pay</span><input id="law-yaw_pay" type="number" step="0.1" min="0"></label>
+          <label title="moments the progress term is averaged over: 1 pays each moment's own progress (the plain law), N pays the mean of the last N, so a leg that comes back earns nothing over the window. Measured at 20 and 50: it removes the calm stall, no gait"><span>window</span><input id="law-window" type="number" step="1" min="1"></label>
+          <label title="pay new ground only: progress beyond the farthest point reached, so a sway earns nothing. Not a hint, the same outcome counted once; the mark is the life's and is shown on the law line. Off by default; measured: it closes the sway's income and with it nearly all income"><span>high-water</span><input id="law-high_water" type="checkbox"></label>
+          <label title="under the high-water mark, the share of the plain pay given for progress on ground already reached: 0 is the mark alone, 1 the plain law, 0.2 to 0.5 the leaking marks measured (the slowest of the laws to lose a found crawl). Needs high-water on"><span>old ground</span><input id="law-old_ground" type="number" step="0.1" min="0" max="1"></label>
+          <label title="reward per metre of progress, under the cap of 0.5 a moment: at 40 (the founder) a full stroke pays 0.4; 20, 10 and 5 were measured: 10 goes backward, 5 stands, no gait"><span>pay per metre</span><input id="law-pay_per_metre" type="number" step="1" min="1"></label>
+          <label title="share of the pay per metre charged for a metre backward: 0 leaves backward free (the shipped law: a foot in the air pays exactly zero), 1 charges it in full (the first law; measured, it did not help)"><span>backward pay</span><input id="law-backward_pay" type="number" step="0.1" min="0" max="1"></label>
+          <button id="apply-law" title="apply the seven settings above from the next moment on; the same law is no change and is not counted">Apply law</button>
+        </div>
+        <div class="col">
+          <p class="small" title="what Reset gives birth to. Genes are composed once, at birth, so they, the seed, the motor model and the senses are set here and take effect on Reset only; the law above is the life's and stays. The sidecar carries the birth, so the server continues it on the next start whatever its flags say">next birth, on Reset</p>
+          <label title="the random seed the newborn brain is composed with; the same seed and genes compose the same newborn. The readings in the README are seeds 0 to 2"><span>seed</span><input id="birth-seed" type="number" step="1" min="0"></label>
+          <label title="the body's motor model, the world's and not a controller: rate (the founder) moves a joint for one moment per command; target makes each joint a position servo whose setpoint a command sets to an end of its range and hold keeps. A life keeps its model; readings under target are named as such"><span>motors</span><select id="birth-motors"><option value="rate">rate</option><option value="target">target</option></select></label>
+          <label title="sense the sixteen servo setpoints too (target motors only): 280 inputs instead of 152. Measured: changes nothing after the first block"><span>setpoints</span><input id="birth-setpoints" type="checkbox"></label>
+          <label title="the actor's own eligibility decay, apart from the critic's (cadence docs/reward.md): empty is the founder, none, where an act's credit fades at gamma times lam a moment (0.57 here); 0.9 remembers acts over about 10 moments, 0.97 over about 33, 1 holds every act until an episode ends, which never comes here. Measured at 0.9 and 0.97: no seed held a walk"><span>hold</span><input id="birth-hold" type="number" step="0.01" min="0" max="1" placeholder="none"></label>
+          <label title="the policy's entropy in the actor's step (cadence docs/reward.md): 0 is the founder, off; 0.1 is the docs' dose and the one measured, it costs about a third more a moment and learns on the cpu backend only (torch refuses). Measured: two seeds of three walked 4 to 5 m in 30,000 moments, the farthest of this project, one fell calm"><span>entropy</span><input id="birth-entropy" type="number" step="0.05" min="0"></label>
+          <label title="maturity (cadence docs/reward.md): the slow use of plasticity that lowers the actor's step as it is spent, at the founder's scale 10 and recovery 200,000 moments (maturity_scale and maturity_recovery in the genes below set others). Off is the founder. Measured: one seed of three held a slow walk, two swayed"><span>maturity</span><input id="birth-maturity" type="checkbox"></label>
+          <label title="other gene overrides for the newborn in the nursery's words, space-separated name=value; empty is the founder. Founder: temperature=0.3 eta=0.03 eta_bias=0.003 lam=0.6 gamma=0.95 eta_critic=5 arousal.need=0.05 arousal.heat=2 modules=64,32 recall=false history_decays= (none) hold=none entropy=0 maturity=false maturity_scale=10 maturity_recovery=200000. Examples: gamma=0.99 eta_critic=20 arousal.need=0 modules=48,24 recall=true history_decays=0,0.7,0.95 hold=0.9 entropy=0.1 maturity=true"><span>genes</span><input id="birth-genes" type="text" placeholder="founder" spellcheck="false"></label>
+          <p class="small" id="genesline" title="the genes and seed the living brain was born with">—</p>
+        </div>
+      </div>
+    </details>
     <p class="small" id="brainline">—</p>
     <canvas id="brain" width="320" height="96"></canvas>
     <p class="small">drag to turn the world · wheel to zoom · <span id="link">connecting…</span></p>

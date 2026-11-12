@@ -53,9 +53,10 @@ def test_a_life_composes_its_brain_for_its_senses(tmp_path):
 
 
 def test_a_saved_brain_for_other_senses_is_refused_at_the_load(tmp_path):
-    """A life saved with the default senses cannot be continued with per 16 senses: the
-    load reports the mismatch instead of a life that refuses every moment (which is what
-    ``server.py --per 16`` over an old runs/ did until 2026-11-12). The saved life stays."""
+    """A life saved with the default senses asked for per 16 senses: the sidecar names the
+    saved senses and the load continues the life with them, noted, instead of a life that
+    refuses every moment (which is what ``server.py --per 16`` over an old runs/ did until
+    2026-11-12). A brain file without its sidecar still reports the mismatch."""
     import pytest
     from spider.life import Life
     from spider.brain import make_policy
@@ -64,13 +65,34 @@ def test_a_saved_brain_for_other_senses_is_refused_at_the_load(tmp_path):
         life.tick()
     life.save()
     wide = Life("brain", seed=0, pace=0, runs=tmp_path, senses=Senses(per=16), backend="cpu")
-    with pytest.raises(ValueError, match="composed for 152 inputs, the senses give 296"):
-        wide.load()
-    assert wide.moments == 0 and wide.policy.brain.inputs == 16 * 18 + LEGS
-    assert (tmp_path / "spider.npz").exists() and (tmp_path / "spider.json").exists()
+    assert wide.load()["custody"] == "kept" and wide.moments == 3
+    assert wide.senses.per == 8 and wide.policy.brain.inputs == 8 * 18 + LEGS
+    assert any("saved with 152 inputs, asked for 296" in note for note in wide.notes)
     for name in ("brain", "frozen"):
         with pytest.raises(ValueError, match="composed for 152 inputs"):
             make_policy(name, 0, tmp_path / "spider.npz", None, "cpu", inputs=16 * 18 + LEGS)
-    # the matching senses still continue it
-    same = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
-    assert same.load()["custody"] == "kept" and same.moments == 3
+    (tmp_path / "spider.json").unlink()                                      # the brain file alone
+    alone = Life("brain", seed=0, pace=0, runs=tmp_path, senses=Senses(per=16), backend="cpu")
+    with pytest.raises(ValueError, match="composed for 152 inputs, the senses give 296"):
+        alone.load()
+    assert alone.moments == 0 and (tmp_path / "spider.npz").exists()
+
+
+def test_the_setpoint_senses_are_an_option_of_target_motors():
+    import pytest
+
+    senses = Senses(setpoints=True)
+    assert senses.inputs == 8 * (18 + 2 * LEGS) + LEGS and len(senses.input_names()) == senses.inputs
+    assert any("hip3_set" in n for n in senses.input_names())
+    spider = Spider(motors="target")
+    x = senses.observe(spider)
+    assert x.shape == (1, senses.inputs) and np.all(x >= 0.0) and np.all(x <= 1.0)
+    readings = senses.readings(spider)
+    assert readings.shape == (18 + 2 * LEGS,)
+    assert np.array_equal(readings[18:18 + LEGS], spider.targets[:, 0])
+    assert np.array_equal(readings[18 + LEGS:], spider.targets[:, 1])
+    spider.step([2] * LEGS * 2)                                   # every joint sent to its high end
+    assert np.all(senses.readings(spider)[18:] == spider.targets.reshape(-1, order="F"))
+    with pytest.raises(ValueError):
+        senses.readings(Spider(motors="rate"))
+    assert not Senses().setpoints and Senses().inputs == INPUTS

@@ -51,10 +51,30 @@ bar says so.
 
 Buttons: pause and resume; recentre (the body returns to the origin, nothing else changes);
 save and load (`runs/spider.npz` and its sidecar `runs/spider.json`); reset, which asks for
-confirmation and then ends the life: a newborn brain of the same seed takes the body, the world
+confirmation and then ends the life: a newborn brain takes the body, the world
 returns to the origin, every counter is zero and the saved life is deleted; the policy that commands
 the body, `brain`, `random` or a `frozen copy` of the live brain; the pace, 1× (20 moments a
 second, the body's own clock), 2×, 5× or as fast as the machine goes.
+
+Every reading, button and setting on the panel explains itself on mouse-over, with the measured dose where one exists. Under the buttons, a collapsed `settings` line opens two columns. **law, live** holds the
+reward's seven settings (the stance and yaw hints, the window, the high-water mark and its leak,
+the pay per metre and the backward charge) and `Apply law` changes them from the next moment on;
+the outcome already earned is delivered as it was earned, and the same law is no change. A life
+whose law changed is not a life under one law: it is a schedule, and the page says so. Every
+change is noted ("law changed at moment N: …, this life is a schedule"), counted on the law
+line ("a schedule: changed 2×"), reported by `/api/describe` as `law_changes` and saved with
+the life, so a continued life keeps the law it was last paid under, whatever flags the server
+was started with (a note says which). **next birth, on Reset** holds what Reset gives birth
+to: the seed, the motor model, whether the servos' setpoints are sensed (target motors only),
+the reward learner's three options from cadence's docs/reward.md as fields of their own (the
+actor's `hold`, its `entropy`, `maturity`; measured in "The reward learner's options") and
+the newborn's other genes in the nursery's words (`gamma=0.99 eta_critic=20 arousal.need=0
+modules=48,24 recall=true`; empty is the founder). Genes are composed once, at birth, which is
+why they change nowhere else; the live brain's genes and seed are shown under the field. The
+confirmation names the birth, and the page reloads on the new life. The sidecar carries the
+seed, the senses and the gene overrides of such a birth, so the server continues it on the next
+start whatever its flags say; a brain file without its sidecar still needs the senses it was
+composed for.
 
 The server autosaves every five minutes and at shutdown, and continues a saved life on the
 next start, with the world's state and the outcome the brain had not yet received. Stopping
@@ -63,19 +83,21 @@ and starting the server is not a new spider. Delete `runs/` for a newborn.
 The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--port` (8080),
 `--policy` (`brain`), `--seed` (0), `--pace` (20), `--backend` (auto), `--runs` (`runs`),
 `--autosave-minutes` (5), `--gene` and `--per` for a newborn brain, and the reward's settings
-`--stance-pay` (0), `--yaw-pay` (0), `--window` (1), `--high-water` (off), `--pay-per-metre`
-(40) and `--backward-pay` (0), the two hints, the window, the high-water mark, the gain and
-the backward charge described under [the reward](#the-reward-spiderlifepy), and `--motors`
-(`rate`) for a newborn's body. An
+`--stance-pay` (0), `--yaw-pay` (0), `--window` (1), `--high-water` (off), `--old-ground` (0),
+`--pay-per-metre` (40) and `--backward-pay` (0), the two hints, the window, the high-water
+mark and its leak, the gain and
+the backward charge described under [the reward](#the-reward-spiderlifepy), `--motors`
+(`rate`) for a newborn's body and `--setpoints` (off) to sense the servos' setpoints too. An
 environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
-`AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `PAY_PER_METRE`,
-`BACKWARD_PAY`, `MOTORS`) sets a flag's
-default. A saved life is continued with its own genes; a reward setting applies from the
-start it is given at, and the high-water mark of a life saved without one starts where the
-body stands. A saved brain's senses are fixed: a start with another `--per` over its `runs/`
-is refused with a message naming both input counts (not a life that refuses every moment),
-and the saved life is left as it was; Reset on the page, or another `--runs`, gives the new
-senses a newborn.
+`AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `OLD_GROUND`, `PAY_PER_METRE`,
+`BACKWARD_PAY`, `MOTORS`, `SETPOINTS`) sets a flag's
+default. A saved life is continued with its own genes, seed, senses, motors and law, each
+noted when a flag asked for another (a life saved before the sidecar carried the law, the seed
+and the senses takes them from the flags, as before), and the high-water mark of a life saved
+without one starts where the body stands. A brain file without its sidecar has fixed senses:
+a start with another `--per` over it is refused with a message naming both input counts (not
+a life that refuses every moment), and the file is left as it was; Reset on the page, or
+another `--runs`, gives the new senses a newborn.
 
 For development against a checkout of the library: `.venv/bin/python -m pip install -e ../cadence`.
 
@@ -172,6 +194,13 @@ Eighteen continuous readings (sixteen joint angles, forward speed, yaw rate) thr
 `PopulationCode` with eight tuned inputs each, plus one raw flag per foot that says whether
 it touches the ground: 152 inputs in `[0, 1]`. No constant drive input, no target.
 
+Under the position commands (`--motors target`) the body carries sixteen setpoints the brain
+cannot see in the angles alone: a joint still on its way reads the same as a joint that was
+never sent. `--setpoints` adds them as sixteen more readings through the same code (280
+inputs): the brain senses what it last told each servo, which is its own state, not the
+world's. It is an option of the senses, measured under [the setpoint senses](#the-setpoint-senses),
+and a saved brain's senses are fixed as with `--per`.
+
 ### The reward (`spider/life.py`)
 
 `reward = clip(40 × progress, 0, 0.5) − stance_pay × max(0, 4 − stance) − yaw_pay × |turn|`,
@@ -187,7 +216,10 @@ distance has gained beyond the farthest it ever reached, so a sway earns on its 
 once and never again, while every step onto new ground pays at once. The mark is the life's,
 saved in the sidecar and loaded with it (`mark` in the summary and the state); a save made
 before the mark existed starts it where the body stands. Its readings are under "The
-high-water mark" below. `--pay-per-metre G` (`PAY_PER_METRE` for the server, default 40) sets
+high-water mark" below. `--old-ground S` (`OLD_GROUND`, default 0) lets the mark leak: under
+`--high-water`, progress on ground already reached is paid the share S of what the plain law
+would pay, new ground all of it; 0 is the mark, 1 the plain law, and the readings between are
+under "The leaking mark" below. `--pay-per-metre G` (`PAY_PER_METRE` for the server, default 40) sets
 the progress term's gain under the same cap: at 40 one planted stroke moment (0.01 m) pays 0.4,
 all but the cap, so four pushing feet pay what one does; at 10 the cap is four such moments
 away. Its readings are under "The pay per metre" below; the default stays 40.
@@ -227,17 +259,20 @@ was chosen by that comparison.
 | efference | off | Robot Arena founder |
 | heard history | none (the brain hears this moment only) | 0.97.1's default without recall |
 | episodic memory | on, consolidation 0.05 | Robot Arena founder |
-| recall memory | off | chosen here (a 0.97.1 default, off for cost) |
+| recall memory | off | chosen here (a 0.97.1 default, off for cost; measured in "The recall memory and the temperature") |
 | sensory scale | 4 | Robot Arena founder, unmeasured on 152 coded inputs |
 | lateral (motor inhibition) | −0.5 | Robot Arena founder |
 | temperature | 0.3 | Robot Arena founder |
 | actor eta / bias / lam / gamma / critic | 0.03 / 0.003 / 0.6 / 0.95 / 5 | Robot Arena founder |
+| actor hold / entropy | off (`hold=none`) / 0 | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
+| maturity (scale, recovery) | off (10, 200,000) | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
 | arousal | threshold 0.2, decay 0.9, tolerance 2, floor 0.1, fast 0.05, slow 0.005, heat 2, youth 300, value surprise 1, need 0.05 | Robot Arena founder |
 
 328 neurons, 22,041 parameters. Candidate genes are set on the nursery with
 `--gene name=value` (`--gene modules=48,24`, `--gene arousal.need=0`, `--gene recall=true`,
-`--gene efference_amplitude=3`, `--gene history_decays=0,0.7,0.95`) and `--per N` for the
-population code.
+`--gene efference_amplitude=3`, `--gene history_decays=0,0.7,0.95`, `--gene hold=0.9`,
+`--gene entropy=0.1`, `--gene maturity=true`), `--per N` for the
+population code and `--setpoints` for the servo setpoints as readings.
 
 ### Backend
 
@@ -259,9 +294,11 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --yaw-pay 5     # charge turning too
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --window 20      # pay the mean progress of 20 moments
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --high-water     # pay new ground only
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --high-water --old-ground 0.2  # and old ground a fifth
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --pay-per-metre 10  # a quarter of the gain, the same cap
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --backward-pay 1   # charge backward as forward pays
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors target    # position servos, a different model
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors target --setpoints  # and the setpoints sensed
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
@@ -1051,13 +1088,304 @@ crawl of gamma 0.99 under the plain law remains the longest stretch and the law 
 The moment costs of this batch were disturbed by the traces running beside it and are not
 read.
 
+**The longer horizons, under servos.** Gamma 0.99 bought the crawl and the plain law ended
+it; the next lengths of the horizon, 0.995 (two hundred moments) and 0.998 (five hundred),
+asked whether more credit for the return swing holds it. Servos, seeds 0–2, 30,000 moments,
+frozen copies, and the trace over the first 20,000 moments:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, founders (table above) | +0.205 (+0.08; 4.7 → 2.9; 0.99; 0.017) | +0.360 (+0.03; 3.1 → 4.2; 1.00; 0.021) | +1.503 (−0.10; 3.7 → 3.9; 0.99; 0.023) |
+| servos, gamma 0.99 (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| servos, gamma 0.995 | +0.373 (0.00; 3.9 → 4.0; 0.00; 0.052) | −0.017 (−0.01; 3.2 → 4.8; 0.91; 0.027) | +1.362 (+0.01; 3.2 → 3.4; 0.98; 0.024) |
+| servos, gamma 0.998 | +0.225 (+0.06; 4.2 → 4.9; 0.99; 0.026) | +0.293 (−0.03; 2.6 → 4.4; 1.00; 0.021) | +0.995 (+0.11; 3.4 → 3.7; 0.95; 0.028) |
+| frozen copies, 3000 moments (0.995 / 0.998) | 0.075 / 0.130 | 0.148 / 0.152 | 0.152 / 0.122 |
+
+**Reading:** the crawl comes again and ends the same way. Under 0.995 seed 2 walks on
+legs 5 and 6 for 10,000 moments (+0.46 and +0.49 m per 5000, the strokes +3.15 against
+−2.69 of the rest, 3.3 feet down), then the chain flag goes out and the blocks fall to
++0.28, +0.04, +0.08, +0.01: the same crawl gamma 0.99 found on seed 0, on another seed,
+not longer. Seed 0 under 0.995 is the stall at its purest: after one block of strokes
+(+0.37 m) every foot stays down, no leg lifts again through 15,000 traced moments, the hips
+hold at −0.28 within 0.02, and the body sways at 0.052 a moment, the highest income of any
+run, calm (aroused 0.00) from its second block on. Seed 1 is the founders' scatter. Under
+0.998 no chain lights for more than one window on any seed; seed 2 keeps +0.66 m of its
+first block and then earns +0.03 to +0.13 per 5000 from one or two legs that lift 150–200
+times a block, the rest of the feet planted (3.7 at the end), and seeds 0 and 1 are the
+founders'. The copies are the hip sweep, and seed 0's under 0.995 is short of one. A longer
+horizon lengthens nothing: the credit that reaches the return swing at 0.99 reaches it at
+0.998 too, and so does the sway's, which is why the longest stretch of this reading is the
+same 10,000 moments. The founders stay (gamma 0.95); 0.99 remains the reading to build on.
+4.8–5.1 ms a moment, 2.2 for the stalled seed 0, which hardly learns.
+
+**The setpoint senses.** Under servos a joint on its way to an end reads, in its angle,
+as a joint that was never sent, and the brain cannot tell its own last command from the
+world unless it recalls it. `--setpoints` adds the sixteen setpoints to the readings (280
+inputs), so the brain's state holds what it told each servo; a swing then has a sensed
+beginning the credit can reach. Servos, seeds 0–2, 30,000 moments, under the founders and
+under gamma 0.99, the frozen newborn with the setpoints, frozen copies, and the trace over
+the first 20,000 moments; random does not read the senses and is the servo row above:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, founders (table above) | +0.205 (+0.08; 4.7 → 2.9; 0.99; 0.017) | +0.360 (+0.03; 3.1 → 4.2; 1.00; 0.021) | +1.503 (−0.10; 3.7 → 3.9; 0.99; 0.023) |
+| servos, setpoints | +1.207 (+0.02; 3.1 → 4.1; 0.97; 0.029) | +0.758 (+0.02; 4.1 → 5.2; 1.00; 0.022) | +0.596 (−0.07; 3.0 → 4.9; 0.99; 0.022) |
+| servos, gamma 0.99 (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| servos, setpoints, gamma 0.99 | +0.850 (+0.20; 3.1 → 3.7; 0.92; 0.030) | +0.549 (+0.04; 4.3 → 5.6; 1.00; 0.020) | +1.428 (+0.28; 3.7 → 4.1; 0.93; 0.029) |
+| frozen newborn, setpoints, 3000 moments | +0.053 (2.0) | −0.062 (5.0) | +0.099 (4.0) |
+| frozen copies, 3000 moments (founders / gamma 0.99) | 0.157 / 0.155 | 0.149 / 0.152 | 0.151 / 0.112 |
+
+**Reading:** the setpoints change the first block and not the life. Every setpoint run
+earns its first 5000 moments more than the founders' body (+0.93, +0.54, +0.62 m under the
+founders; +0.37, +0.39, +0.56 under gamma 0.99), with three legs in the chain for seed 0's
+first window (legs 0, 1 and 5, the strokes +3.23 against −2.30), and then the hips reach
+the back stop (mean −0.57 to −0.59, within 0.03–0.06) and every block after is within
+±0.15 m, the income 0.020–0.030 a moment: the stroke, then the sway, as under every law
+before. No run stalls calm the way seed 0 of gamma 0.99 and 0.995 did; the sway under the
+setpoints is a lifting one (one to four legs lifting 100–240 times a block, 3.6–5.8 feet
+down). The one run whose late blocks grow, seed 2 under gamma 0.99 (+0.11, +0.15, +0.17,
++0.28 per 5000), is a ratchet on legs 1 and 4, not a chain: continued for 10,000 traced
+moments it earns +0.09 and +0.05, the chain flag on leg 4 in one window and out in the
+next. The copies are the hip sweep. What the setpoints give the brain is what its working
+memory already held of its own commands; the credit's reach, not the state, is what the
+return swing lacks. The senses stay without them; `--setpoints` is an option named in its
+readings. 5.8–6.0 ms a moment for 280 inputs against 4.8–5.1 for 152.
+
+**The leaking mark.** The mark starved the crawl and the plain law fed the sway; between
+them lies a mark that leaks: `--old-ground S` pays new ground whole and progress on ground
+already reached the share S of what the plain law pays (0 the mark, 1 the plain law). At
+0.2 a sway keeps a fifth of its forward half, a crawl keeps its new ground; the arithmetic
+of the crawl as found (+3.46 m of strokes against −2.61 of the rest per 10,000 moments,
+the strokes mostly on old ground) says it nets about what the sway does, so the reading
+asked whether the brain finds a cleaner crawl when the sway pays less. Servos, gamma 0.99,
+the mark leaking 0.2 and 0.5, seeds 0–2, 30,000 moments; random under each leak for the
+income chance nets; frozen copies; the trace over the first 20,000 moments:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| servos, gamma 0.99, high-water (table above) | −1.673 (+0.25; 3.7 → 3.6; 1.00; 0.000) | −0.276 (+0.05; 2.7 → 2.5; 1.00; 0.000) | −0.115 (−0.38; 3.8 → 4.2; 1.00; 0.000) |
+| servos, gamma 0.99, mark leaking 0.2 | −0.212 (−0.05; 4.3 → 4.5; 1.00; 0.006) | −0.215 (+0.10; 3.0 → 4.1; 1.00; 0.006) | +0.446 (−0.11; 3.7 → 4.3; 1.00; 0.007) |
+| servos, gamma 0.99, mark leaking 0.5 | −0.079 (0.00; 3.9 → 4.6; 1.00; 0.012) | +0.271 (−0.07; 3.1 → 4.5; 1.00; 0.014) | +0.230 (−0.09; 3.7 → 3.7; 1.00; 0.012) |
+| random, servos, mark leaking 0.2 | −1.131 (+0.41; 2.9 → 3.1; 0.012) | +0.508 (−0.17; 3.1 → 3.2; 0.013) | −0.120 (−0.95; 3.1 → 3.3; 0.012) |
+| random, servos, mark leaking 0.5 | −1.131 (+0.41; 2.9 → 3.1; 0.030) | +0.508 (−0.17; 3.1 → 3.2; 0.031) | −0.120 (−0.95; 3.1 → 3.3; 0.030) |
+| frozen copies, 3000 moments (0.2 / 0.5) | 0.155 / 0.151 | 0.079 / 0.144 | 0.128 / 0.154 |
+
+**Reading:** the leak pays chance its share and the learner less. Random's income is the
+leak's share of its plain income (0.012 and 0.030 a moment for 0.060), as the law says.
+The brain's income falls through the life under either leak, from 0.017 a moment in the
+first 5000 to 0.006 under 0.2 and from 0.033 to 0.012 under 0.5, the end below random's at
+both doses: what it learns is, again, to net less than chance earns, the way it did under
+the mark and the charge. No crawl forms. The chain flag lights on one to three legs in a
+first window (legs 2, 3 and 5 for seed 2 under 0.2, +0.57 m) and is out in the next; from
+10,000 moments on the hips sit at the back stop (−0.52 to −0.58 within 0.05–0.08), five to
+seven legs lift 100–220 times a block, and the blocks are within ±0.3 m, the body
+wandering as random does, 120–200 rad turned in the life. Seed 1 under 0.2 stays below its
+start for 30,000 moments. The copies are the hip sweep, two of them short of it. The leak
+does what the arithmetic said: at 0.2 the sway's jitter pays a fifth, which is too little
+to carry the half chain the plain law carried for 20,000 moments, and the crawl that would
+beat the sway under this law is one the brain never found under any law; a leak large
+enough to carry the jitter is the plain law. The defaults stay (the mark off, the leak 0).
+4.9–5.2 ms a moment.
+
+**The found crawl under the leak-free laws.** Every law above was measured from birth, where
+what the law does to a crawl is tangled with what it does to the search for one. The
+diagnosis that separates them: take a crawl the plain law found, and continue it under the
+laws that starved the newborn, to see whether they starve a crawl that exists or only the
+finding of it. Two specimens, one of each: seed 0 under servos and gamma 0.99, saved at
+15,000 moments in its crawl on legs 2–3 (+1.19 m, +0.40 in its last 5000, 4.0 feet planted);
+seed 2 under servos and gamma 0.995, saved at 10,000 moments in its crawl on legs 5–6
+(+0.95 m, +0.49 in its last 5000, 3.3 planted). Each save is continued, with its world and
+its pending outcome, under the plain law, the mark, the charge (backward pay 1) and the mark
+leaking 0.2: 15,000 moments for seed 0, 20,000 for seed 2, and 50,000 for the two that held
+longest and the plain law beside them; frozen copies of the saves, 3000 moments, for the hip
+sweep's floor. Each number is one specimen under one law. A life that changes its law is a
+schedule, a different model to be named as such; these continuations measure what such a
+schedule would do, they are not readings of any law from birth.
+
+| continued, forward metres per 5000 moments (r/moment; planted feet; aroused, first → last window) | seed 0 from 15,000, legs 2–3 | seed 2 from 10,000, legs 5–6 |
+| --- | --- | --- |
+| plain law | +0.45 +0.06 −0.01 (0.034 → 0.049; 4.0 → 5.0; 0.81 → 0.00) | +0.28 +0.04 +0.08 +0.01 (0.025; 3.3; 0.97) |
+| high-water mark | +0.26 +0.14 +0.10 (0.003 → 0.002; 3.9 → 4.1; 1.00) | +0.06 −0.13 +0.01 −0.14 (0.002 → 0.000; 3.3 → 3.7; 1.00) |
+| charge, backward pay 1 | +0.10 −0.10 −0.04 (0.001 → 0.000; 3.9; 1.00) | +0.25 −0.05 −0.05 −0.05 (0.002 → 0.000; 3.2 → 3.3; 1.00) |
+| mark leaking 0.2 | +0.48 +0.06 +0.05 (0.013 → 0.008; 4.0; 1.00) | +0.17 +0.32 +0.17 +0.21 (0.008 → 0.009; 3.2 → 3.8; 1.00) |
+| frozen copy of the save, 3000 moments | 0.098 | 0.152 |
+
+| 50,000 moments on, forward metres per 5000 (total; rad turned) | |
+| --- | --- |
+| seed 0 under the mark | +0.26 +0.14 +0.10 −0.07 +0.11 −0.15 −0.07 −0.07 −0.05 +0.30 (+0.50; 458) |
+| seed 2 under the mark leaking 0.2 | +0.17 +0.32 +0.17 +0.21 +0.04 −0.10 +0.16 +0.00 +0.02 +0.07 (+1.07; 203) |
+| seed 2 under the plain law | +0.28 +0.04 +0.08 +0.01 −0.03 +0.04 +0.07 −0.13 −0.04 +0.02 (+0.35; 166) |
+
+**Reading:** every law loses the crawl it was handed; they differ in how. Under the plain law
+seed 0 does what its newborn did (the gamma 0.99 row above): one more block of its crawl
+(+0.45, the chain flag on legs 2–3), then the lifts fall from 130–156 a leg a block to 43–59
+and to none, five feet stay planted, and the life ends calm at 0.049 a moment with no learning
+sweep, the sway that pays better than the crawl. Seed 2 keeps its three lifting legs (0, 5, 6
+at 90–150 lifts a block) and loses the ground they made: +0.28 in the first block, within
+±0.1 in every block after, the strokes +1.8 m against −1.75 of the rest, the income 0.025 for
+50,000 moments. Under the mark seed 2 loses the crawl in one block and seed 0 in three: the
+lifts rise to 160–200 a leg, the hips leave the stop (−0.44 within 0.15), the strokes pay +4.8
+against −4.5, and the life wanders within ±0.3 a block for 45,000 moments at an income of
+0.000, 458 rad turned, the newborn's end under the mark. Under the charge both stop: the same
+legs keep lifting but the stroke and the return shrink together (seed 0 from +2.5 / −2.1 to
++0.9 / −1.0 per 5000, seed 2 from +1.3 / −1.0 to +0.75 / −0.8), the income 0.000; the
+charge teaches to move less, not to move clean. Under the leak seed 0 holds one block
+(+0.48, legs 2–3) and then nets what the plain law nets, awake; seed 2 is the one specimen
+that holds: +0.87 over 20,000 moments, the chain flag on leg 6 in three windows of four, the
+strokes rising from +2.6 to +3.1 against −2.4 to −2.9 of the rest. From 20,000 on it fades
+as leg 1 joins the lifting (0 → 155–209 a block), the planted feet rise to 4.0 and the
+strokes come to +2.4 against −2.4: +1.07 in 50,000 moments, 0.021 a thousand, under the
+0.051 a thousand the frozen copy's sweep makes, and the +0.87 it held was 0.044 a thousand,
+the sweep's pace. So the laws that starved the newborn starve the found crawl too, the leak
+slowest, and the plain law keeps a crawl no better than it finds one: the loss is in the
+credit, which pays the stroke at once and the return never, under every law built, and a
+schedule of these laws is not a next step. 3.7–4.0 ms a moment.
+
+**The recall memory and the temperature.** Two genes of the brain that no reading above had
+moved, each aimed at the credit from the brain's side rather than the law's. The recall
+memory (`--gene recall=true`; off in the founders for cost, and named in `AGENTS.md` as a
+gene to measure, not a default to flip) gives the brain a memory of situations met before,
+the place where a cycle might be seen as a cycle. The temperature (`--gene temperature=T`,
+founder 0.3) is the policy's sampling noise: if the sway earns on the forward half of a
+jitter, a colder brain jitters less and the sway pays less without a change of law; 0.15 is
+that reading and 0.5 its converse. Servos, gamma 0.99, seeds 0–2, 30,000 moments; frozen
+copies; the trace over the first 20,000 moments:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| servos, gamma 0.99, recall on | +0.415 (−0.04; 4.1 → 5.4; 1.00; 0.020) | +0.360 (+0.41; 1.6 → 3.8; 0.86; 0.032) | +0.499 (+0.02; 4.6 → 4.2; 1.00; 0.025) |
+| servos, gamma 0.99, temperature 0.15 | +0.939 (+0.28; 4.9 → 4.1; 0.85; 0.034) | +0.051 (+0.08; 3.8 → 3.5; 0.91; 0.032) | +0.580 (+0.05; 5.2 → 4.4; 0.93; 0.031) |
+| servos, gamma 0.99, temperature 0.5 | +0.015 (−0.17; 3.4 → 3.4; 0.96; 0.024) | +0.252 (−0.03; 3.1 → 4.8; 0.98; 0.030) | +0.258 (+0.07; 3.3 → 3.3; 0.96; 0.028) |
+| random, servos (the tables above) | −1.131 (+0.41; 2.9 → 3.1; 0.060) | +0.508 (−0.17; 3.1 → 3.2; 0.060) | −0.120 (−0.95; 3.1 → 3.3; 0.060) |
+| frozen copies, 3000 moments (recall / 0.15 / 0.5) | 0.152 / 0.153 / 0.155 | 0.116 / 0.141 / 0.152 | 0.153 / 0.154 / 0.152 |
+
+**Reading:** neither gene changes what happens after the first block, and both lose the
+stretch gamma 0.99 bought on seed 0. With recall the first blocks are +0.30, +0.10 and +0.53
+and every block after within ±0.2 but seed 1's last (+0.41, a brain that began on 1.6 feet
+and spent the life getting up, its income rising from 0.013 to 0.032); by 10,000 moments
+seeds 0 and 2 sit at the back stop (−0.53 to −0.58 within 0.04–0.08) with five to six legs
+lifting 140–190 times a block and the strokes paying what the rest costs (+2.5 / −2.5,
++1.8 / −1.8), the sway, at twice the cost: 9.7–10.4 ms a moment for 4.9–5.2 without the
+memory. The cold brain is not the one the arithmetic wanted. Its income is not lower but
+higher (0.031–0.034 a moment at the end against 0.025 at the founder's 0.3): the jitter the
+sway earns on is not the sampling noise but a learned rhythm, hips at the stop within
+0.02–0.07 and four to five legs lifting 130–200 times a block, which a colder policy
+executes more cleanly. Seed 0 under 0.15 keeps one block (+0.31) and seed 2 two (+0.24,
++0.23, the chain flag on leg 4 and then 5), and seed 1 never begins: +0.03 and within ±0.07
+for the life, three legs lifting and the hips at −0.29 within 0.03 from the second window
+on, a sway from birth with no stroke to lose. The warm brain has the largest first block of
+the three (seed 0, +0.74, the chain flag on leg 1, the hips still moving) and then loses it
+(−0.04, −0.34, −0.12, …) as the hips go to the stop; its other seeds are within ±0.2
+throughout. The copies are the sweep. The defaults stay (recall off, temperature 0.3): the
+memory finds the sway at twice the price, and the temperature, in either direction, moves
+only the first block.
+
+**The critic's rate.** The third handle the brain has on its credit, after the eligibility
+and the horizon above: the critic's learning rate (`--gene eta_critic=R`, founder 5, the
+multiple of the actor's rate at which the value of a situation is learned). A slower critic
+(1) averages a situation's value over more of the cycle, a faster one (20) follows the
+stroke. Servos, gamma 0.99, seeds 0–2, 30,000 moments; frozen copies; the trace over the
+first 20,000; and the one life that held, continued 30,000 moments more under the same law:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| servos, gamma 0.99, critic rate 1 | +0.412 (0.00; 3.3 → 3.0; 0.00; 0.043) | +0.899 (+0.16; 2.0 → 3.2; 0.99; 0.020) | +0.369 (0.00; 3.6 → 3.2; 0.99; 0.020) |
+| servos, gamma 0.99, critic rate 20 | +0.425 (−0.04; 3.9 → 3.7; 0.96; 0.027) | +1.771 (+0.13; 2.8 → 4.2; 0.79; 0.033) | +0.713 (+0.01; 3.7 → 3.7; 0.99; 0.024) |
+| frozen copies, 3000 moments (1 / 20) | 0.059 / 0.142 | 0.149 / 0.111 | 0.155 / 0.152 |
+| critic rate 20, seed 1, per 5000 moments, 0–30,000 | +0.31 +0.23 +0.67 +0.17 +0.26 +0.13 | | |
+| the same life continued, 30,000–60,000 | +0.10 +0.21 +0.06 +0.20 +0.18 +0.01 (+0.757; 0.023–0.026 a moment; 4.1 planted; aroused 0.96) | | |
+
+**Reading:** the fast critic holds a stretch on one seed, the slow one stalls one. Critic 1
+on seed 0 is the rocking of the rate body back on the servos: one block (+0.41), then not
+one lift in 25,000 moments, three feet planted, the hips at −0.14 within 0.00, an income of
+0.043 a moment from a body that rocks in place and never wakes (aroused 0.00, 2.0 ms a
+moment with nothing to learn); its copy walks 0.059, under the sweep. Seed 1 under critic 1
+nets +0.2 a block for four blocks with the chain flag on leg 5, at an income of 0.020–0.031,
+and seed 2 ends in the sway. Critic 20 on seed 1 is the longest-held forward motion in this
+project on this body: +1.771 m in 30,000 moments with every block positive, +0.67 in the
+third (the strokes +2.27 against −1.60 of the rest, the chain flag on legs 4 and 5), and
+continued 30,000 moments more it still moves, +0.757, eleven blocks positive of twelve,
++2.53 m in 60,000 moments. What holds is not the chain crawl: from 20,000 on the chain flag
+is out, the hips sit at the back stop (−0.59 within 0.04), five legs (1, 2, 4, 6, 7) lift
+150–190 times a block and the strokes net a twelfth of what they pay (+1.65 against −1.45
+per 5000). It is a rhythm that keeps a little of each stroke, 0.025 m a thousand moments,
+half the pace of a frozen copy's hip sweep and a sixth of the crawl gamma 0.99 found; its
+own copy walks 0.111, the walking being in the sampling, not the greedy answer. Seeds 0 and
+2 under critic 20 lose their first blocks (+0.33, +0.65) to the sway within 15,000 moments.
+One seed of three, and below the founder's reading on seed 0 by 1.3 m: the founder stays
+at 5. The critic's rate is the first gene whose specimen did not lose its ground in 60,000
+moments, and the one reading above worth more seeds. 4.2–4.6 ms a moment.
+
+**The reward learner's options.** The library's reward learner has three settings beyond
+the five above, documented in cadence's docs/reward.md and off in the founder: the actor's
+own eligibility decay (`--gene hold=H`; the founder, none, lets an act's credit fade at gamma
+times lam a moment, 0.57 here with gamma 0.99; 0.9 remembers about 10 moments, 0.97 about
+33), the policy's entropy in the actor's step (`--gene entropy=E`; 0.1 is the docs' dose; it
+learns on the cpu backend only and costs about a third more a moment) and maturity
+(`--gene maturity=true`; the slow use of plasticity that lowers the actor's step as it is
+spent, scale 10 and recovery 200,000 moments the founder's). Servos, gamma 0.99, seeds 0–2,
+30,000 moments; frozen copies; the trace of the entropy lives; and the one life that walked
+farthest, continued 30,000 moments more under the same law:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| servos, gamma 0.99, entropy 0.1 | +0.564 (+0.01; 3.3 → 3.0; 0.00; 0.070) | +5.218 (+0.63; 3.1 → 4.6; 0.46; 0.053) | +4.263 (+0.69; 4.9 → 4.9; 0.00; 0.052) |
+| servos, gamma 0.99, hold 0.9 | +1.119 (+0.30; 5.2 → 4.2; 0.64; 0.040) | +0.225 (+0.14; 3.6 → 4.6; 0.72; 0.038) | −0.563 (+0.15; 4.5 → 4.8; 0.80; 0.035) |
+| servos, gamma 0.99, hold 0.97 | +0.837 (−0.03; 4.5 → 4.9; 0.65; 0.042) | +0.056 (0.00; 2.4 → 3.0; 0.00; 0.074) | +0.847 (0.00; 3.9 → 5.0; 0.00; 0.043) |
+| servos, gamma 0.99, maturity | +1.527 (+0.15; 4.2 → 4.5; 0.91; 0.031) | +0.213 (0.00; 3.1 → 3.8; 0.75; 0.038) | −0.213 (−0.05; 3.5 → 3.8; 0.99; 0.022) |
+| frozen copies, 3000 moments (entropy / hold 0.9 / hold 0.97 / maturity) | 0.066 / 0.128 / 0.086 / 0.157 | 0.119 / 0.151 / 0.038 / 0.112 | 0.122 / 0.155 / 0.057 / 0.154 |
+| entropy 0.1, per 5000 moments, 0–30,000 | +0.58 −0.02 +0.01 +0.01 −0.02 +0.01 | +1.35 +1.61 +0.70 +0.36 +0.58 +0.63 | +0.84 +0.69 +0.69 +0.69 +0.69 +0.69 |
+| entropy 0.1, seed 1, continued 30,000–60,000 | | +1.30 +1.28 +1.30 +1.27 +1.30 +1.28 (+7.717; 0.046 a moment; 5.4 planted; aroused 0.00; every block positive) | |
+
+**Reading:** the entropy term is the one option that moved a reading, and by more than any
+gene above: two seeds of three walked 4 to 5 m in 30,000 moments, three times the previous
+best on this body, and seed 1 continued is the first life of this project that walks every
+block, +12.9 m in 60,000 moments. What walks is not a gait of the legs: on both seeds the
+brain fell calm into a cycle it repeats to the bit. Seed 2 from moment 1300 (aroused 0.00,
+not one learning sweep after, 0.0137 m per 100 moments for 28,700 moments): legs 3, 4 and
+5 in the air for good, leg 2 tapping (2943 lifts of one moment), the knee of leg 2 and the
+hips of legs 3 and 7 flipping end to end on a period of ten, a jitter that nets 0.14 m a
+thousand moments across the arena (3.9 m from the origin, its heading turned 2.7 rad in
+all). Seed 1 learned for 29,000 moments (aroused 0.46, 177 blocks of 300 positive, all
+eight legs lifting 500–800 times each) and then fell calm into a one-legged row: six legs stand,
+legs 5 and 7 hang in the air, and leg 1 alone sweeps its hip back on the ground (−0.021 rad
+a moment) and forward in the air (+0.016) on a period of sixteen, 188 strokes per 3000
+moments, 0.26 m a thousand moments at 1.6 ms a moment, and it turns with it: −0.79 rad per
+3000, a circle of about a metre's radius, so the body that walked 7.7 m forward in the
+continuation is 1.2 m from where it started it. The law pays forward along the heading and
+never asked for a straight line (the yaw term above is the hint for that, and it stopped
+every walk it was dosed on). Seed 0 under entropy fell calm by 5000 moments into the rock
+(0.070 a moment, three feet planted, aroused 0.00 for 25,000 moments). The copies walk 0.07–0.12, under
+the sweep: both cycles are the sampled policy's, not the greedy answer's. The hold at 0.9
+and 0.97 and maturity change nothing a seed holds: hold 0.9 gains +0.30 in its last block
+on seed 0 and loses 0.56 on seed 2, hold 0.97 stalls two seeds calm, maturity holds +0.15 a
+block on seed 0 only and sways the others. The founder stays as it is: entropy 0.1 is not a
+walk of the legs but a calm cycle that happens to go forward, found twice in three seeds,
+and it is the one gene whose next reading is worth seeds 3–5, a dose of 0.03 and 0.3, and
+the stance term with it (the calm cycles stand on five feet already). Entropy 0.1 costs
+3.7 ms a moment aroused, 2.0 calm; hold 3.3–3.8; maturity 4.3.
+
 What a next step would measure, each against the same controls and on the eight-legged body:
 the finer code with the stance term over a longer life, the one gene that moved the first
-block; a continuation of the 34 m brain; and a course hint on the net heading drift over a
-window rather than the unsigned turn. What the crawl needs is a law that pays it more than
-the sway without paying the jitter nothing, and none of the laws built does; a life that
-begins under the plain law and goes on under the charge once the crawl exists would be a
-schedule, a different model to be named as such, not a law. A smaller body, four legs of two
+block; and a course hint on the net heading drift over a
+window rather than the unsigned turn. The horizon past 0.99, the setpoints as senses, the
+leaking mark, the recall memory, the temperature, the actor's hold and maturity are measured
+above and change nothing after the first block; the critic's rate at 20 held one seed's slow
+rhythm for 60,000 moments and is worth seeds 3–5 and a dose between 5 and 20; the entropy
+term at 0.1 walked two seeds of three 4–5 m and one of them every block of 60,000 moments,
+in calm cycles the brain repeats to the bit (a jitter, a one-legged row on a circle), and is
+the one gene above worth seeds 3–5, a dose of 0.03 and 0.3, and the stance term alongside;
+the 34 m brain's world (contact model, support rule, leg stop) has
+changed under it since, so its continuation is no longer one life. What the
+crawl needs is a law that pays it more than
+the sway without paying the jitter nothing, and none of the laws built does, the leaking
+mark included, and the continuations above show that no law built keeps a crawl once it is
+found either, so a schedule of them (the plain law to find it, another to keep it) is not a
+next step. A smaller body, four legs of two
 joints where the support rule lets one leg swing at a time, is a different model to be named
 as the servos are; it does not meet the collapse above, which is in the credit and the law,
 not in the number of legs.

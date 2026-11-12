@@ -204,3 +204,22 @@ def test_spider_payload_and_the_learning_levels():
     assert repair.shape == (n,) and 0.0 <= repair.min() and repair.max() <= 1.0
     sensory = len(brain.brain.sensory_index)
     assert repair[:sensory].max() == 0.0 and repair[sensory:].max() > 0.0
+
+
+def test_the_reward_learners_options_are_genes():
+    """``hold``, ``entropy`` and ``maturity`` (cadence docs/reward.md) are genes; at their
+    founders the composed actor is the same to the bit, and off they are absent from the save."""
+    import numpy as np
+    from spider.brain import compose, genes_from_text
+    founder = compose(0, None, inputs=20, backend="cpu")
+    same = compose(0, genes_from_text("hold=none entropy=0 maturity=false"), inputs=20, backend="cpu")
+    assert founder.basal_ganglia.config.hold is None and founder.basal_ganglia.config.entropy == 0.0
+    assert np.array_equal(np.asarray(founder.basal_ganglia.synapses), np.asarray(same.basal_ganglia.synapses))
+    tuned = compose(0, genes_from_text("hold=0.9 entropy=0.1 maturity=true maturity_scale=20"), inputs=20, backend="cpu")
+    config = tuned.basal_ganglia.config
+    assert config.hold == 0.9 and config.entropy == 0.1
+    assert tuned.basal_ganglia.maturity is not None and founder.basal_ganglia.maturity is None
+    rng = np.random.default_rng(0)
+    tuned.live([rng.random(20)])
+    for _ in range(5):
+        tuned.live([rng.random(20)], reward=[0.1])

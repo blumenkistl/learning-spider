@@ -200,7 +200,7 @@ const $ = id => document.getElementById(id);
 const fmt = (v, d = 3) => (v === null || v === undefined) ? '—' : Number(v).toFixed(d);
 let described = null;
 fetch('/api/describe').then(r => r.json()).then(d => {
-  described = d;
+  describedBy(d);
   buildLegs(d.hips);
   if (lastPose) draw(lastPose);                      // a frame may have arrived first (a paused server sends one)
   const b = d.brain;
@@ -209,9 +209,39 @@ fetch('/api/describe').then(r => r.json()).then(d => {
     : `control: ${d.control && d.control.policy}`;
   if (b) openBrainView();
   else $('brainpanel-note').textContent = '· no brain in this life';
-  if (lastState) $('law').textContent = law(lastState);
-  $('motors').textContent = d.motors || 'rate';
 }).catch(() => {});
+// What the description settles on the page: the law line, the motor line and the settings' fields.
+// Called again after a control that changes the description (a law change, a load).
+function describedBy(d) {
+  described = d;
+  if (lastState) $('law').textContent = law(lastState);
+  $('motors').textContent = (d.motors || 'rate') + (d.setpoints ? ', setpoints sensed' : '');
+  const r = d.reward || {};
+  for (const k of LAW_KEYS) {
+    const field = $('law-' + k);
+    if (field.type === 'checkbox') field.checked = !!r[k]; else field.value = r[k];
+  }
+  $('birth-seed').value = d.seed;
+  $('birth-motors').value = d.motors || 'rate';
+  $('birth-setpoints').checked = !!d.setpoints;
+  const genes = { ...(d.genes || {}) };
+  $('birth-hold').value = genes.hold == null ? '' : genes.hold;
+  $('birth-entropy').value = genes.entropy == null ? 0 : genes.entropy;
+  $('birth-maturity').checked = !!genes.maturity;
+  for (const k of ['hold', 'entropy', 'maturity']) delete genes[k];
+  $('birth-genes').value = geneWords(genes);
+  $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
+}
+const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay'];
+// The nursery's words for a brain's gene overrides: {gamma: 0.99, arousal: {need: 0}} → "gamma=0.99 arousal.need=0".
+function geneWords(genes, prefix = '') {
+  return Object.entries(genes || {}).map(([k, v]) =>
+    v && typeof v === 'object' && !Array.isArray(v) ? geneWords(v, prefix + k + '.') : `${prefix}${k}=${Array.isArray(v) ? v.join(',') : v}`
+  ).join(' ');
+}
+async function refreshDescription() {
+  try { describedBy(await (await fetch('/api/describe')).json()); } catch (e) { /* the socket shows the state anyway */ }
+}
 
 // The reward law, from the settings the server described and the mark of the moment: "progress"
 // is the plain law (each moment's progress); a window pays the mean of the last N moments; the
@@ -222,9 +252,11 @@ function law(m) {
   const parts = [r.window > 1 ? `window ${r.window}` : 'progress'];
   if (r.pay_per_metre !== 40) parts.push(`${r.pay_per_metre}/m`);
   if (r.backward_pay) parts.push(`backward ${r.backward_pay}`);
-  if (r.high_water) parts.push(`high-water · mark ${fmt(m.mark)} m`);
+  if (r.high_water) parts.push(`high-water${r.old_ground ? ' leaking ' + r.old_ground : ''} · mark ${fmt(m.mark)} m`);
   if (r.stance_pay) parts.push(`stance ${r.stance_pay}`);
   if (r.yaw_pay) parts.push(`yaw ${r.yaw_pay}`);
+  const changes = described.law_changes ? described.law_changes.length : 0;
+  if (changes) parts.push(`a schedule: changed ${changes}×`);
   return parts.join(' · ');
 }
 let lastState = null;
@@ -378,16 +410,46 @@ function heat(v) {
 }
 
 // --- controls and the socket ---------------------------------------------------------------
-const RESET_QUESTION = 'Reset everything?\n\nA newborn brain of the same seed replaces the live one, '
-  + 'the world returns to the origin, every counter goes to zero and the saved life in runs/ is deleted.\n\n'
-  + 'The brain that has lived until now is gone for good.';
-document.querySelectorAll('button[data-op]').forEach(b => b.addEventListener('click', async () => {
-  if (b.dataset.op === 'reset' && !window.confirm(RESET_QUESTION)) return;
-  const body = { op: b.dataset.op };
-  if (b.dataset.value !== undefined) body.value = isNaN(b.dataset.value) ? b.dataset.value : Number(b.dataset.value);
+// Reset gives birth to what the settings name; genes are composed once, so this is the one
+// place they are set. The page reloads on the new life: a reset is a new life, not a new frame.
+function birth() {
+  // the three reward-learner genes have fields of their own; the rest is the text, in the nursery's words
+  const words = [$('birth-genes').value.trim()];
+  if ($('birth-hold').value !== '') words.push('hold=' + Number($('birth-hold').value));
+  if (Number($('birth-entropy').value) > 0) words.push('entropy=' + Number($('birth-entropy').value));
+  if ($('birth-maturity').checked) words.push('maturity=true');
+  return { seed: Number($('birth-seed').value), motors: $('birth-motors').value,
+           setpoints: $('birth-setpoints').checked, genes: words.filter(Boolean).join(' ') };
+}
+function resetQuestion(b) {
+  return 'Reset everything?\n\nA newborn brain replaces the live one: seed ' + b.seed + ', ' + b.motors + ' motors'
+    + (b.setpoints ? ', setpoints sensed' : '') + ', ' + (b.genes ? 'genes ' + b.genes : 'founder genes') + '.\n'
+    + 'The world returns to the origin, every counter goes to zero and the saved life in runs/ is deleted.\n\n'
+    + 'The brain that has lived until now is gone for good.';
+}
+async function control(body) {
   const r = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) $('notes').textContent = await r.text();
+  if (!r.ok) { $('notes').textContent = await r.text(); return null; }
+  return r.json();
+}
+document.querySelectorAll('button[data-op]').forEach(b => b.addEventListener('click', async () => {
+  const body = { op: b.dataset.op };
+  if (b.dataset.op === 'reset') {
+    body.value = birth();
+    if (!window.confirm(resetQuestion(body.value))) return;
+  } else if (b.dataset.value !== undefined) body.value = isNaN(b.dataset.value) ? b.dataset.value : Number(b.dataset.value);
+  const result = await control(body);
+  if (result && b.dataset.op === 'reset') location.reload();
+  else if (result && b.dataset.op === 'load') refreshDescription();
 }));
+$('apply-law').addEventListener('click', async () => {
+  const value = {};
+  for (const k of LAW_KEYS) {
+    const field = $('law-' + k);
+    value[k] = field.type === 'checkbox' ? field.checked : Number(field.value);
+  }
+  if (await control({ op: 'law', value })) refreshDescription();
+});
 
 function connect() {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);

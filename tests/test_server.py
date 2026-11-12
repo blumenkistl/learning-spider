@@ -95,3 +95,25 @@ def test_flags_mirror_the_nursery_and_the_environment_sets_defaults(tmp_path, mo
     assert args.high_water is True and args.stance_pay == 0.1 and args.port == 8091
     monkeypatch.setenv("HIGH_WATER", "0")
     assert arguments([]).high_water is False and arguments(["--high-water"]).high_water is True
+    monkeypatch.setenv("OLD_GROUND", "0.2")
+    assert arguments([]).old_ground == 0.2 and arguments(["--old-ground", "0.5"]).old_ground == 0.5
+    assert life_from(arguments(["--high-water", "--policy", "random", "--runs", str(tmp_path)])).old_ground == 0.2
+
+
+async def test_the_law_and_a_birth_are_controls(client):
+    r = await client.post("/api/control", json={"op": "law", "value": {"high_water": True, "stance_pay": 0.1}})
+    assert r.status == 200 and (await r.json())["changed"] is True
+    described = await (await client.get("/api/describe")).json()
+    assert described["reward"]["high_water"] is True and described["reward"]["stance_pay"] == 0.1
+    assert len(described["law_changes"]) == 1
+    r = await client.post("/api/control", json={"op": "law", "value": {"old_ground": 2}})
+    assert r.status == 400
+    r = await client.post("/api/control", json={"op": "law", "value": 3})
+    assert r.status == 400
+    r = await client.post("/api/control", json={"op": "reset", "value": {"seed": 7, "motors": "target", "genes": "gamma=0.99"}})
+    assert r.status == 200 and (await r.json())["seed"] == 7
+    described = await (await client.get("/api/describe")).json()
+    assert described["seed"] == 7 and described["motors"] == "target" and described["genes"] == {"gamma": 0.99}
+    assert described["reward"]["high_water"] is True                # the law is the life's, a birth keeps it
+    r = await client.post("/api/control", json={"op": "reset", "value": {"setpoints": True, "motors": "rate"}})
+    assert r.status == 400

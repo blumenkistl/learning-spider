@@ -26,7 +26,7 @@ from typing import Any
 import numpy as np
 
 from .body import DT, HEIGHT, HIPS, JOINTS, LEGS, MOTORS, Spider
-from .brain import FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, make_policy
+from .brain import FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, gene_words, genes_from_text, make_policy
 from .senses import DEFAULT as DEFAULT_SENSES, Senses
 
 PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full stroke speed of 0.2 m/s;
@@ -46,6 +46,9 @@ HIGH_WATER = False      # pay only new ground: progress beyond the farthest poin
                         # its heading (its high-water mark). A sway earns on its forward half under the plain
                         # law and nothing under this one; the mark is the life's, saved and loaded with it
                         # (README, "The high-water mark"); --high-water / HIGH_WATER switch it on
+OLD_GROUND = 0.0        # under the mark, the share of a moment's progress on old ground that is paid: 0 is the
+                        # mark as above, 1 the plain law; between, the mark leaks (README, "The leaking mark");
+                        # --old-ground / OLD_GROUND set it
 YAW_PAY = 0.0           # taken per radian turned in the moment: the hint to go straight, off (README: ignored at
                         # 0.1 and 1 a radian, obeyed at 5 by standing still); --yaw-pay / YAW_PAY switch it on
 BLOCK = 100             # moments per statistics block
@@ -86,6 +89,45 @@ def _replace(path: Path, write) -> None:
             os.unlink(tmp)
 
 
+LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay")
+
+
+def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window: Any = PROGRESS_WINDOW,
+                high_water: Any = HIGH_WATER, old_ground: Any = OLD_GROUND, pay_per_metre: Any = PROGRESS_PAY,
+                backward_pay: Any = BACKWARD_PAY) -> dict[str, Any]:
+    """The law's seven settings, typed and checked; a ValueError names what is wrong."""
+    high_water = bool(high_water)
+    if not 0.0 <= float(old_ground) <= 1.0:
+        raise ValueError(f"old ground is a share of the pay, 0 to 1, not {old_ground}")
+    if float(old_ground) and not high_water:
+        raise ValueError("old ground is paid under the high-water mark only (--high-water)")
+    if float(pay_per_metre) <= 0:
+        raise ValueError(f"pay per metre must be positive, not {pay_per_metre}")
+    if not 0.0 <= float(backward_pay) <= 1.0:
+        raise ValueError(f"backward pay is a share of the forward pay, 0 to 1, not {backward_pay}")
+    if int(window) < 1:
+        raise ValueError(f"window must be at least 1 moment, not {window}")
+    return {"stance_pay": float(stance_pay), "yaw_pay": float(yaw_pay), "window": int(window),
+            "high_water": high_water, "old_ground": float(old_ground),
+            "pay_per_metre": float(pay_per_metre), "backward_pay": float(backward_pay)}
+
+
+def law_text(law: dict[str, Any]) -> str:
+    """The law in the page's words: ``progress`` is the plain law."""
+    parts = [f"window {law['window']}" if law["window"] > 1 else "progress"]
+    if law["pay_per_metre"] != PROGRESS_PAY:
+        parts.append(f"{law['pay_per_metre']:g}/m")
+    if law["backward_pay"]:
+        parts.append(f"backward {law['backward_pay']:g}")
+    if law["high_water"]:
+        parts.append("high-water" + (f" leaking {law['old_ground']:g}" if law["old_ground"] else ""))
+    if law["stance_pay"]:
+        parts.append(f"stance {law['stance_pay']:g}")
+    if law["yaw_pay"]:
+        parts.append(f"yaw {law['yaw_pay']:g}")
+    return " · ".join(parts)
+
+
 class Life:
     """The world, the policy and the loop. ``policy`` is ``brain``, ``random`` or ``frozen``."""
 
@@ -107,22 +149,13 @@ class Life:
         pay_per_metre: float = PROGRESS_PAY,
         motors: str = "rate",
         backward_pay: float = BACKWARD_PAY,
+        old_ground: float = OLD_GROUND,
     ) -> None:
         self.name = name                        # the file stem under runs/
-        self.high_water = bool(high_water)      # the progress term pays new ground only
+        self._take_law(checked_law(stance_pay=stance_pay, yaw_pay=yaw_pay, window=window, high_water=high_water,
+                                   old_ground=old_ground, pay_per_metre=pay_per_metre, backward_pay=backward_pay))
         self.mark = 0.0                         # the farthest distance_forward reached: the high-water mark
-        self.stance_pay = float(stance_pay)     # 0 switches the posture hint off
-        self.yaw_pay = float(yaw_pay)           # 0 switches the course hint off
-        if float(pay_per_metre) <= 0:
-            raise ValueError(f"pay per metre must be positive, not {pay_per_metre}")
-        self.pay_per_metre = float(pay_per_metre)   # the progress term's gain; the cap stays
-        if not 0.0 <= float(backward_pay) <= 1.0:
-            raise ValueError(f"backward pay is a share of the forward pay, 0 to 1, not {backward_pay}")
-        self.backward_pay = float(backward_pay)     # 0 leaves backward free
-        if int(window) < 1:
-            raise ValueError(f"window must be at least 1 moment, not {window}")
-        self.window = int(window)
-        self._progress: deque[float] = deque(maxlen=self.window)   # the last window moments' progress
+        self.law_changes: list[dict[str, Any]] = []   # every live change of the law, moment and law (a schedule)
         self.seed = int(seed)
         self.genes = genes
         self.backend = backend
@@ -132,6 +165,8 @@ class Life:
         if motors not in MOTORS:
             raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
         self.motors = str(motors)               # the body's motor model, the life's own; a saved life keeps its own
+        if senses.setpoints and self.motors != "target":
+            raise ValueError("the setpoint senses need target motors (--motors target)")
         self.body = Spider(motors=self.motors)
         self.policy = make_policy(policy, self.seed, brain_path, genes, backend, inputs=senses.inputs)
         self.reward: float | None = None        # the last executed command's outcome, not yet delivered
@@ -154,6 +189,44 @@ class Life:
         self.notes: list[str] = []
         self.latest: dict[str, Any] = self.snapshot(None)
 
+    # --- the law --------------------------------------------------------------------------
+
+    def _take_law(self, law: dict[str, Any]) -> None:
+        self.high_water = law["high_water"]     # the progress term pays new ground only
+        self.old_ground = law["old_ground"]     # the share old ground is paid under the mark: 0 none, 1 all
+        self.stance_pay = law["stance_pay"]     # 0 switches the posture hint off
+        self.yaw_pay = law["yaw_pay"]           # 0 switches the course hint off
+        self.pay_per_metre = law["pay_per_metre"]   # the progress term's gain; the cap stays
+        self.backward_pay = law["backward_pay"]     # 0 leaves backward free
+        self.window = law["window"]
+        kept = list(getattr(self, "_progress", []))[-self.window:]
+        self._progress: deque[float] = deque(kept, maxlen=self.window)   # the last window moments' progress
+
+    def law(self) -> dict[str, Any]:
+        """The reward law this life is paid under, the seven settings the flags set."""
+        return {"stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay, "window": self.window,
+                "high_water": self.high_water, "old_ground": self.old_ground,
+                "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay}
+
+    def set_law(self, changes: dict[str, Any]) -> dict[str, Any]:
+        """Change the law under which this life is paid, from the next moment on. The outcome
+        already earned is delivered as it was earned. A life whose law changes is a schedule,
+        a different model from a life under one law: every change is noted, counted, shown
+        and saved with the life, so that nobody reads it as a life under one law."""
+        changes = dict(changes or {})
+        unknown = sorted(set(changes) - set(LAW_KEYS))
+        if unknown:
+            raise ValueError(f"not a setting of the law: {', '.join(unknown)} (the law is {', '.join(LAW_KEYS)})")
+        with self.lock:
+            law = checked_law(**{**self.law(), **changes})
+            if law == self.law():
+                return {"law": law, "changed": False}
+            self._take_law(law)
+            self.law_changes.append({"moment": self.moments, "law": law})
+            self.notes.append(f"law changed at moment {self.moments}: {law_text(law)} (change {len(self.law_changes)}: this life is a schedule)")
+            self.latest = self.snapshot(None)
+        return {"law": law, "changed": True}
+
     # --- one moment -----------------------------------------------------------------------
 
     def tick(self) -> dict[str, Any]:
@@ -166,8 +239,10 @@ class Life:
             self.moments += 1
             self.distance_forward += outcome["progress"]
             if self.high_water:
-                # new ground only: a step back and the same step forward again earn nothing
-                gained = max(0.0, self.distance_forward - self.mark)
+                # new ground only: a step back and the same step forward again earn nothing,
+                # unless the mark leaks, when the rest of the progress is paid at the old-ground share
+                new = max(0.0, self.distance_forward - self.mark)
+                gained = new + self.old_ground * (outcome["progress"] - new)
                 self.mark = max(self.mark, self.distance_forward)
             else:
                 gained = outcome["progress"]
@@ -288,7 +363,11 @@ class Life:
             elif op == "load":
                 return {"ok": True, **self.load()}
             elif op == "reset":
-                return {"ok": True, **self.reset()}
+                return {"ok": True, **self.reset(value if isinstance(value, dict) else None)}
+            elif op == "law":
+                if not isinstance(value, dict):
+                    raise ValueError("law takes an object of the settings to change, e.g. {\"high_water\": true}")
+                return {"ok": True, **self.set_law(value)}
             elif op == "policy":
                 return {"ok": True, **self.switch(str(value))}
             elif op == "pace":
@@ -369,6 +448,8 @@ class Life:
                 "format": FORMAT,
                 "cadence": CADENCE_VERSION,
                 "seed": self.seed,
+                "senses": {"per": self.senses.per, "setpoints": self.senses.setpoints},
+                "genes": self.genes or {},
                 # under a control, the brain's last outcome already sits in its owed
                 "reward": self.reward if self.policy is brain else None,
                 "owed": brain.owed,
@@ -376,6 +457,8 @@ class Life:
                 "refusals": brain.refusals,
                 "distance_forward": self.distance_forward,
                 "mark": self.mark,
+                "law": self.law(),
+                "law_changes": list(self.law_changes),
                 "turned": self.turned,
                 "recentres": self.recentres,
                 "world": self.body.state_dict(),
@@ -393,14 +476,28 @@ class Life:
         if not self.brain_file.exists():
             return {"loaded": False, "why": f"{self.brain_file} does not exist"}
         with self.lock:
+            state = json.loads(self.sidecar.read_text()) if self.sidecar.exists() else None
+            if state is not None:
+                if state.get("format") != FORMAT:
+                    raise ValueError(f"{self.sidecar}: unknown format {state.get('format')!r}")
+                # the seed and the senses are the life's too (a page's birth names them): a life
+                # saved before the sidecar carried them is continued with the flags', as before
+                if "seed" in state and int(state["seed"]) != self.seed:
+                    self.notes.append(f"saved with seed {state['seed']}, asked for {self.seed}: the saved life keeps its own")
+                    self.seed = int(state["seed"])
+                if "genes" in state:
+                    self.genes = dict(state["genes"]) or None    # the overrides the saved brain was composed with
+                if "senses" in state:
+                    saved_senses = Senses(per=int(state["senses"]["per"]), setpoints=bool(state["senses"]["setpoints"]))
+                    if (saved_senses.per, saved_senses.setpoints) != (self.senses.per, self.senses.setpoints):
+                        self.notes.append(f"saved with {saved_senses.inputs} inputs" + (", setpoints sensed" if saved_senses.setpoints else "")
+                                          + f", asked for {self.senses.inputs}: the saved life keeps its own")
+                        self.senses = saved_senses
             where = backend_of(self.backend)
             brain = fitted(SpiderBrain.load(self.brain_file, where.get("backend")), self.senses.inputs, self.brain_file)
             self.policy = brain
             self._brain = None
-            if self.sidecar.exists():
-                state = json.loads(self.sidecar.read_text())
-                if state.get("format") != FORMAT:
-                    raise ValueError(f"{self.sidecar}: unknown format {state.get('format')!r}")
+            if state is not None:
                 self.reward = state["reward"]
                 brain.owed = None if state.get("owed") is None else float(state["owed"])
                 brain.refusals = int(state.get("refusals", 0))
@@ -408,12 +505,21 @@ class Life:
                 self.distance_forward = float(state["distance_forward"])
                 # a life saved before the mark existed starts it where the body stands: no back pay
                 self.mark = float(state.get("mark", self.distance_forward))
+                if "law" in state:
+                    # the law is the life's: a life saved under one law continues under it, whatever the flags say
+                    saved = checked_law(**state["law"])
+                    if saved != self.law():
+                        self.notes.append(f"saved under the law {law_text(saved)}, asked for {law_text(self.law())}: the saved life keeps its own")
+                        self._take_law(saved)
+                    self.law_changes = list(state.get("law_changes", []))
                 self.turned = float(state.get("turned", 0.0))
                 self.recentres = int(state.get("recentres", 0))
                 self.body = Spider.restore(state["world"])
                 if self.body.motors != self.motors:
                     self.notes.append(f"saved with {self.body.motors} motors, asked for {self.motors}: the saved life keeps its own")
                     self.motors = self.body.motors
+                    if self.senses.setpoints and self.motors != "target":
+                        raise ValueError(f"{self.brain_file}: the setpoint senses need target motors, the saved life has {self.motors}")
                 self._progress = deque([float(v) for v in state.get("progress_window", [])][-self.window:], maxlen=self.window)
                 self.blocks = deque(state.get("blocks", []), maxlen=BLOCKS_KEPT)
                 if state.get("cadence") != CADENCE_VERSION:
@@ -431,18 +537,41 @@ class Life:
             self.latest = self.snapshot(None)
         return {"loaded": True, "path": str(self.brain_file), "moments": self.moments, "custody": custody}
 
-    def reset(self) -> dict[str, Any]:
-        """A new life in the same body: a newborn brain of the same seed and genes commands
-        it, the world stands at its origin, every counter is zero and the saved life is
-        deleted so a restart does not continue the old one. The old brain is gone. This is
-        the one deliberate end of a continuing life, taken only on the page's Reset after
-        the person confirmed it."""
+    def reset(self, birth: dict[str, Any] | None = None) -> dict[str, Any]:
+        """A new life in the same world: a newborn brain commands the body, the world stands at
+        its origin, every counter is zero and the saved life is deleted so a restart does not
+        continue the old one. The old brain is gone. This is the one deliberate end of a
+        continuing life, taken only on the page's Reset after the person confirmed it.
+
+        ``birth`` names the newborn: ``seed``, ``genes`` (overrides, a dict or the nursery's
+        ``name=value`` words in one string), ``motors`` and ``setpoints``; what it leaves out
+        stays as the life had it. Genes are composed once, at birth, which is why they are
+        set here and nowhere else. The law is the life's and stays as it is."""
+        birth = dict(birth or {})
+        unknown = sorted(set(birth) - {"seed", "genes", "motors", "setpoints"})
+        if unknown:
+            raise ValueError(f"a birth names seed, genes, motors and setpoints, not {', '.join(unknown)}")
+        seed = int(birth.get("seed", self.seed))
+        genes = birth.get("genes", self.genes)
+        if isinstance(genes, str):
+            genes = genes_from_text(genes) or None
+        elif genes is not None and not isinstance(genes, dict):
+            raise ValueError("genes are name=value words or an object")
+        motors = str(birth.get("motors", self.motors))
+        if motors not in MOTORS:
+            raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
+        setpoints = bool(birth.get("setpoints", self.senses.setpoints))
+        if setpoints and motors != "target":
+            raise ValueError("the setpoint senses need target motors")
+        senses = self.senses if setpoints == self.senses.setpoints else Senses(per=self.senses.per, setpoints=setpoints)
+        newborn = make_policy("brain", seed, None, genes, self.backend, inputs=senses.inputs)   # composed before the old life ends
         with self.lock:
             was = self.moments
             for path in (self.brain_file, self.sidecar, self.runs / "frozen-copy.npz"):
                 if path.exists():
                     path.unlink()
-            self.policy = make_policy("brain", self.seed, None, self.genes, self.backend, inputs=self.senses.inputs)
+            self.seed, self.genes, self.motors, self.senses = seed, genes, motors, senses
+            self.policy = newborn
             self._brain = None
             self.body = Spider(motors=self.motors)
             self.reward = None
@@ -456,12 +585,16 @@ class Life:
             self.blocks.clear()
             self._block = []
             self._progress.clear()
+            self.law_changes = []
             self._last_save = time.monotonic()
             self.last_save_at = None
             self.loaded_from = None
-            self.notes = [f"reset after {was} moments: a newborn brain of seed {self.seed}"]
+            born = f"seed {self.seed}, {self.motors} motors" + (", setpoints sensed" if setpoints else "") \
+                + (f", genes {gene_words(genes)}" if genes else ", founder genes")
+            self.notes = [f"reset after {was} moments: a newborn brain of {born}"]
             self.latest = self.snapshot(None)
-        return {"reset": True, "moments_before": was, "seed": self.seed}
+        return {"reset": True, "moments_before": was, "seed": self.seed, "genes": genes or {}, "motors": self.motors,
+                "setpoints": setpoints}
 
     def _maybe_autosave(self) -> None:
         if self.autosave_minutes <= 0 or not isinstance(self.policy, SpiderBrain):
@@ -478,15 +611,15 @@ class Life:
             "dt": DT,
             "motors": self.motors,
             "inputs": self.senses.inputs,
+            "setpoints": self.senses.setpoints,
             "input_names": self.senses.input_names(),
             "joints": JOINTS,
             "legs": LEGS,
             "hips": HIPS.tolist(),
             "height": HEIGHT,
-            "reward": {"pay_per_metre": self.pay_per_metre, "cap": PROGRESS_CAP, "backward_pay": self.backward_pay,
-                       "stance_floor": STANCE_FLOOR, "stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay,
-                       "window": self.window, "high_water": self.high_water,
-                       "mark": round(self.mark, 4)},
+            "reward": {**self.law(), "cap": PROGRESS_CAP, "stance_floor": STANCE_FLOOR, "mark": round(self.mark, 4)},
+            "law_changes": list(self.law_changes),
+            "genes": dict(self.genes or {}),
             "brain": brain.describe() if brain is not None else None,
             "control": self.policy.describe() if self.policy is not brain else None,
             "runs": str(self.runs),

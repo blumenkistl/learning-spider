@@ -18,7 +18,9 @@ without a page, for measurement.
   lives through `brain.live`. It is never recreated per moment, per episode or per page load.
   A saved life is continued, with its world and its pending outcome, not replayed. The page's
   Reset is the one deliberate end of a life: after confirmation it deletes the save and a
-  newborn brain of the same seed takes the body; nothing else recreates a brain.
+  newborn brain takes the body, of the seed, genes, motor model and senses the page's "next
+  birth" names (the life's own when it names nothing); nothing else recreates a brain, and
+  genes are set at birth only.
 - **No controller between brain and motors.** Each motor slot is one joint's
   `decrease / hold / increase`. There is no gait generator, oscillator, inverse kinematics or
   smoothing between the brain's answer and the joints. Adding one makes a different model;
@@ -38,7 +40,11 @@ without a page, for measurement.
   (off by default: no measured dose straightened the course without stopping the walk).
   Both are labelled as shaping, their readings are in the README, and `--stance-pay` and
   `--yaw-pay` in the nursery and the server, or the same names in the server's environment,
-  set them.
+  set them. The page's "law, live" changes the seven settings on the living brain
+  (`Life.set_law`, control `law`); a life whose law changed is a schedule, a different model
+  from a life under one law, so every change is noted, counted on the page's law line,
+  reported as `law_changes` and saved with the life, and the sidecar's law outranks the flags
+  on a load. A reading of a life with a `law_changes` entry is a reading of a schedule.
   The high-water mark (`--high-water`, `HIGH_WATER`; off by default) is not a hint: it is the
   same outcome counted once, progress beyond the farthest point reached, so a sway earns
   nothing. The mark belongs to the life and is saved and loaded with it.

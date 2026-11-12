@@ -357,3 +357,111 @@ def test_a_saved_life_keeps_its_motor_model(tmp_path):
     assert again.body.motors == "target"                                        # a reset keeps the life's model
     with pytest.raises(ValueError):
         Life("random", seed=0, pace=0, runs="/nonexistent", motors="servo")
+
+
+def test_the_setpoint_senses_need_target_motors_and_are_continued(tmp_path):
+    from spider.senses import Senses
+
+    with pytest.raises(ValueError):
+        Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", senses=Senses(setpoints=True))
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target", senses=Senses(setpoints=True))
+    assert life.describe()["setpoints"] is True and life.describe()["inputs"] == 8 * 34 + 8
+    for _ in range(12):
+        life.tick()
+    life.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target", senses=Senses(setpoints=True))
+    assert again.load()["custody"] == "kept"
+    for _ in range(6):
+        assert life.tick()["pose"] == again.tick()["pose"]
+    plain = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target")
+    assert plain.load()["custody"] == "kept" and plain.senses.setpoints is True   # the sidecar names the senses
+
+
+def test_the_leaking_mark_pays_old_ground_a_share(tmp_path):
+    def earned(policy, **law):
+        life = Life("random", seed=0, pace=0, runs=tmp_path, stance_pay=0.0, **law)
+        life.policy = policy()
+        return sum((life.tick(), life.reward)[1] for _ in range(120)), life        # unrounded
+
+    plain, _ = earned(SwayPolicy)
+    sealed, _ = earned(SwayPolicy, high_water=True)
+    leaking, life = earned(SwayPolicy, high_water=True, old_ground=0.2)
+    whole, _ = earned(SwayPolicy, high_water=True, old_ground=1.0)
+    assert plain > 0.1 and 0 <= sealed < 0.02 * PROGRESS_PAY         # a sway: the plain law pays it, the mark not
+    assert leaking == pytest.approx(sealed + 0.2 * (plain - sealed))  # the leak pays the old ground a fifth
+    assert whole == pytest.approx(plain)                              # and all of it is the plain law again
+    assert life.describe()["reward"]["old_ground"] == 0.2
+    walk_plain, _ = earned(HalfStrokePolicy)
+    walk_leak, _ = earned(HalfStrokePolicy, high_water=True, old_ground=0.2)
+    assert walk_leak == pytest.approx(walk_plain)                     # every step is new ground: no leak to pay
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs=tmp_path, old_ground=0.2)             # old ground needs the mark
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs=tmp_path, high_water=True, old_ground=1.5)
+
+
+def test_the_law_changes_live_and_is_noted_counted_and_saved(tmp_path):
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")
+    for _ in range(3):
+        life.tick()
+    owed_before = life.reward
+    report = life.control("law", {"high_water": True, "window": 4})
+    assert report["ok"] and report["changed"] and report["law"]["high_water"] is True
+    assert life.reward == owed_before                       # the outcome earned stays as earned
+    assert len(life.law_changes) == 1 and life.law_changes[0]["moment"] == 3
+    assert "law changed at moment 3" in life.notes[-1] and "schedule" in life.notes[-1]
+    assert life.describe()["law_changes"] == life.law_changes
+    assert life.control("law", {"window": 4})["changed"] is False   # the same law is no change
+    for _ in range(6):
+        life.tick()                                              # the window of 4 averages the last four moments
+    assert len(life._progress) == 4
+    with pytest.raises(ValueError):
+        life.control("law", {"old_ground": 0.5, "high_water": False})
+    with pytest.raises(ValueError):
+        life.control("law", {"horizon": 2})
+    with pytest.raises(ValueError):
+        life.control("law", "high_water")
+    life.save()
+    again = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")   # the flags' plain law
+    again.load()
+    assert again.law() == life.law() and again.law_changes == life.law_changes
+    assert any("keeps its own" in note for note in again.notes)
+
+
+def test_reset_takes_a_birth(tmp_path):
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")
+    life.tick()
+    with pytest.raises(ValueError):
+        life.reset({"setpoints": True})                          # setpoints need target motors
+    with pytest.raises(ValueError):
+        life.reset({"genes": "gamma"})
+    with pytest.raises(ValueError):
+        life.reset({"law": {}})
+    report = life.control("reset", {"seed": 3, "genes": "eta_critic=20 gamma=0.99", "motors": "target", "setpoints": True})
+    assert report["seed"] == 3 and report["genes"] == {"eta_critic": 20, "gamma": 0.99}
+    described = life.describe()
+    assert described["seed"] == 3 and described["motors"] == "target" and described["setpoints"] is True
+    assert described["brain"]["genes"]["actor_eta_critic"] == 20 and described["brain"]["genes"]["actor_gamma"] == 0.99
+    assert described["genes"] == {"eta_critic": 20, "gamma": 0.99}
+    assert life.moments == 0 and "seed 3" in life.notes[0] and "setpoints sensed" in life.notes[0]
+    life.tick()
+    assert life.reward is not None
+    plain = life.reset()                                         # the same birth again
+    assert plain["seed"] == 3 and life.senses.setpoints is True
+
+
+def test_a_saved_life_keeps_its_seed_and_senses(tmp_path):
+    from spider.senses import Senses
+
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")
+    life.control("reset", {"seed": 3, "motors": "target", "setpoints": True, "genes": "gamma=0.99"})
+    for _ in range(4):
+        life.tick()
+    life.save()
+    plain = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")      # the flags name another birth
+    assert plain.load()["custody"] == "kept"
+    assert plain.seed == 3 and plain.motors == "target" and plain.senses.setpoints is True and plain.genes == {"gamma": 0.99}
+    assert plain.describe()["inputs"] == life.describe()["inputs"]
+    assert sum("keeps its own" in note for note in plain.notes) == 3        # seed, senses, motors
+    for _ in range(3):
+        assert life.tick()["pose"] == plain.tick()["pose"]

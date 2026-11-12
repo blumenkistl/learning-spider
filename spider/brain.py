@@ -64,7 +64,71 @@ FOUNDER: dict[str, Any] = {
     "history_decays": [],           # no heard history: the brain hears only this moment (0.97.1 composes
                                     # one only with recall); blocks of decays (--gene history_decays=0,0.7,0.95)
                                     # would give it the moments before, a candidate gene for a gait
+    # the reward learner's options (cadence docs/reward.md), each at the value that keeps the
+    # composed actor to the bit; measured in the README's "The reward learner's options":
+    "hold": None,                   # the actor's eligibility decay apart from the critic's: None is
+                                    # gamma * lam (0.57 a moment), 0.9 a horizon of ten moments (a step),
+                                    # 1 holds every act until an episode ends, which never comes here
+    "entropy": 0.0,                 # the policy's entropy in the actor's step; 0.1 is the docs' dose
+    "maturity": False,              # the slow use of plasticity that lowers the actor's step as it is spent
+    "maturity_scale": 10.0,         # the use at which the step factor is 0.5 (with maturity only)
+    "maturity_recovery": 200000,    # moments of the use's time constant (with maturity only)
 }
+
+
+def genes_from_text(text: str) -> dict[str, Any]:
+    """Gene overrides from ``name=value`` words, the nursery's ``--gene`` syntax in one string
+    (``"gamma=0.99 eta_critic=20"``): the page's way of naming a newborn's genes."""
+    return genes_from([parse_gene(word) for word in str(text).split()])
+
+
+def gene_words(genes: dict[str, Any] | None, prefix: str = "") -> str:
+    """The overrides back in ``name=value`` words (``genes_from_text`` the other way), for notes."""
+    words: list[str] = []
+    for name, value in (genes or {}).items():
+        if isinstance(value, dict):
+            words.append(gene_words(value, f"{prefix}{name}."))
+        else:
+            words.append(f"{prefix}{name}={','.join(str(v) for v in value) if isinstance(value, list) else value}")
+    return " ".join(w for w in words if w)
+
+
+def parse_gene(text: str) -> tuple[str, Any]:
+    name, sep, raw = text.partition("=")
+    if not sep:
+        raise ValueError(f"gene {text!r}: expected name=value")
+    raw = raw.strip()
+    value: Any
+    if raw.lower() in ("none", "null"):
+        value = None
+    elif raw.lower() in ("true", "false"):
+        value = raw.lower() == "true"
+    elif "," in raw:
+        value = [_number(v) for v in raw.split(",")]
+    else:
+        value = _number(raw)
+    return name.strip(), value
+
+
+def _number(raw: str) -> Any:
+    raw = raw.strip()
+    try:
+        return int(raw)
+    except ValueError:
+        try:
+            return float(raw)
+        except ValueError:
+            return raw
+
+
+def genes_from(items: list[tuple[str, Any]]) -> dict[str, Any]:
+    genes: dict[str, Any] = {}
+    for name, value in items:
+        if name.startswith("arousal."):
+            genes.setdefault("arousal", {})[name[len("arousal."):]] = value
+        else:
+            genes[name] = value
+    return genes
 
 
 def genes_of(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -118,6 +182,10 @@ def compose(
         actor_lam=float(g["lam"]),
         actor_gamma=float(g["gamma"]),
         actor_eta_critic=float(g["eta_critic"]),
+        actor_entropy=float(g["entropy"]),
+        **({"actor_hold": float(g["hold"])} if g["hold"] is not None else {}),
+        **({"maturity": True, "maturity_scale": float(g["maturity_scale"]),
+            "maturity_recovery": int(g["maturity_recovery"])} if g["maturity"] else {}),
         **where,
     )
 

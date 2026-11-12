@@ -22,44 +22,9 @@ from pathlib import Path
 from typing import Any
 
 from .body import MOTORS
-from .life import BACKWARD_PAY, BLOCK, HIGH_WATER, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
-from .senses import Senses
-
-
-def parse_gene(text: str) -> tuple[str, Any]:
-    name, sep, raw = text.partition("=")
-    if not sep:
-        raise argparse.ArgumentTypeError(f"gene {text!r}: expected name=value")
-    raw = raw.strip()
-    value: Any
-    if raw.lower() in ("true", "false"):
-        value = raw.lower() == "true"
-    elif "," in raw:
-        value = [_number(v) for v in raw.split(",")]
-    else:
-        value = _number(raw)
-    return name.strip(), value
-
-
-def _number(raw: str) -> Any:
-    raw = raw.strip()
-    try:
-        return int(raw)
-    except ValueError:
-        try:
-            return float(raw)
-        except ValueError:
-            return raw
-
-
-def genes_from(items: list[tuple[str, Any]]) -> dict[str, Any]:
-    genes: dict[str, Any] = {}
-    for name, value in items:
-        if name.startswith("arousal."):
-            genes.setdefault("arousal", {})[name[len("arousal."):]] = value
-        else:
-            genes[name] = value
-    return genes
+from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
+from .life import BACKWARD_PAY, BLOCK, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
+from .senses import PER, Senses
 
 
 HEAD = (f"{'moment':>7} {'forward_m':>9} {'r/moment':>8} {'aroused':>7} {'sweeps':>6} "
@@ -67,7 +32,7 @@ HEAD = (f"{'moment':>7} {'forward_m':>9} {'r/moment':>8} {'aroused':>7} {'sweeps
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    senses = Senses(per=args.per) if args.per else Senses()
+    senses = Senses(per=args.per or PER, setpoints=args.setpoints)
     genes = genes_from(args.gene) or None
     runs = args.save.parent if args.save else Path("runs")
     name = args.save.stem if args.save else "spider"
@@ -76,7 +41,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 genes=genes, backend=args.backend, senses=senses,
                 brain_path=None if continuing else args.brain,
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
-                yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water,
+                yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water, old_ground=args.old_ground,
                 pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay)
     life.autosave_minutes = 0.0
     if continuing:
@@ -131,14 +96,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "seconds": round(elapsed, 1),
         "placement": life.brain.describe()["placement"] if life.brain is not None else None,
         "genes": genes or {},
-        "stance_pay": args.stance_pay,
-        "yaw_pay": args.yaw_pay,
-        "window": args.window,
-        "high_water": args.high_water,
-        "pay_per_metre": args.pay_per_metre,
-        "backward_pay": args.backward_pay,
+        **life.law(),                       # a continued life's own law, whatever the flags said
+        "law_changes": life.law_changes,
         "motors": life.motors,
-        "per": senses.per,
+        "per": life.senses.per,
+        "setpoints": life.senses.setpoints,
         "blocks": rows,
     }
     if args.save and life.brain is not None:
@@ -157,6 +119,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     parser.add_argument("--gene", type=parse_gene, action="append", default=[],
                         help="name=value, e.g. modules=48,24 or arousal.need=0 (repeatable)")
     parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
+    parser.add_argument("--setpoints", action="store_true",
+                        help="sense the servos' setpoints too (needs --motors target; sixteen readings more)")
     parser.add_argument("--stance-pay", type=float, default=STANCE_PAY,
                         help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
     parser.add_argument("--yaw-pay", type=float, default=YAW_PAY,
@@ -165,6 +129,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--high-water", action="store_true", default=HIGH_WATER,
                         help="pay new ground only: progress beyond the farthest point reached (default off)")
+    parser.add_argument("--old-ground", type=float, default=OLD_GROUND,
+                        help=f"under --high-water, the share paid for progress on old ground, 0 to 1 (default {OLD_GROUND})")
     parser.add_argument("--pay-per-metre", type=float, default=PROGRESS_PAY,
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=BACKWARD_PAY,
