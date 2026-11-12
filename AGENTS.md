@@ -24,7 +24,12 @@ without a page, for measurement.
   smoothing between the brain's answer and the joints. Adding one makes a different model;
   label it as a control. The body's own stops (the hip and knee ranges, the stop that keeps a
   side's neighbouring legs from crossing) are the world's, not a controller: they bound what
-  the brain's answer can do, they never choose it.
+  the brain's answer can do, they never choose it. The body has two motor models
+  (`--motors`, `MOTORS`): `rate`, the founder, where a command moves the joint for one moment;
+  and `target`, where each joint is a position servo whose setpoint a command sets to an end
+  of the joint's range and `hold` keeps. The servo chooses nothing and knows no gait, but it
+  is a different model, named in every reading made under it (the README's "The position
+  commands"); the model is the life's, saved and loaded with it, never switched on a saved life.
 - **The world supplies problems, never answers.** The reward is the body's forward progress
   along its own heading, capped. No target pose, no phase, no "move leg 3 now". Shaping terms
   (lateral drift, yaw, posture) are not added without a measured reason and a README note.

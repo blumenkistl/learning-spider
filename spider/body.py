@@ -2,8 +2,15 @@
 model that turns the motion of planted feet into motion of the body.
 
 Frame: z up, x forward, y left. Angles in radians, lengths in metres, one moment is ``DT``
-seconds. The sixteen joints are commanded only as ``decrease / hold / increase`` of a target
-angle at a fixed rate; there is no controller between those commands and the joints.
+seconds. The sixteen joints are commanded only as ``decrease / hold / increase``; there is no
+controller between those commands and the joints. The body has two motor models, chosen at its
+birth and kept for its life (``motors``): under ``rate``, the founder, a command moves the
+joint by its rate for one moment and ``hold`` keeps it where it is; under ``target`` each joint
+is a position servo with a setpoint, a command sets the setpoint to that end of the joint's
+range, ``hold`` keeps the setpoint, and the joint moves toward it at the same rate. The servo
+is the joint's own actuator and knows nothing of gaits, but it is a different model: one
+command then drives a whole swing where the founder needs the command sixteen times (README,
+"The position commands").
 
 A foot is planted when it is on the ground, which the knee reaches at and below its zero (a
 pressing leg touches the ground where its tibia crosses it). Propulsion is the negated rigid
@@ -98,6 +105,7 @@ def supported(planted) -> bool:
 HIPS = np.array([(HIP_X[i % PER_SIDE], SIDE[i] * HIP_Y, 0.0) for i in range(LEGS)])
 SPLAY = np.array([HIP_SPLAY[i % PER_SIDE] for i in range(LEGS)])
 RATES = np.array([HIP_RATE, KNEE_RATE])
+MOTORS = ("rate", "target")             # the two motor models; rate is the founder
 LOW = np.array([HIP_RANGE[0], KNEE_RANGE[0]])
 HIGH = np.array([HIP_RANGE[1], KNEE_RANGE[1]])
 
@@ -140,8 +148,14 @@ class Spider:
     planted_before: np.ndarray | None = None
     moments: int = 0
     recentres: int = 0
+    motors: str = "rate"                # the motor model, see the module docstring
+    targets: np.ndarray | None = None   # the servos' setpoints under target motors; unused under rate
 
     def __post_init__(self) -> None:
+        if self.motors not in MOTORS:
+            raise ValueError(f"motors must be one of {MOTORS}, not {self.motors!r}")
+        if self.targets is None:
+            self.targets = self.joints.copy()
         if self.feet_before is None or self.planted_before is None:
             _, foot = kinematics(self.joints)
             self.feet_before = foot
@@ -176,7 +190,14 @@ class Spider:
         cmd = np.asarray(commands, dtype=float).reshape(LEGS, 2) - 1.0
         if not np.all(np.isin(cmd, (-1.0, 0.0, 1.0))):
             raise ValueError("commands must be 0, 1 or 2 per joint")
-        self.joints = separate(np.clip(self.joints + cmd * RATES * DT, LOW, HIGH))
+        if self.motors == "target":
+            # a command sets the servo's setpoint to that end of the range, hold keeps it;
+            # the joint moves toward the setpoint by at most its rate
+            self.targets = np.where(cmd < 0, LOW, np.where(cmd > 0, HIGH, self.targets))
+            move = np.clip(self.targets - self.joints, -RATES * DT, RATES * DT)
+            self.joints = separate(np.clip(self.joints + move, LOW, HIGH))
+        else:
+            self.joints = separate(np.clip(self.joints + cmd * RATES * DT, LOW, HIGH))
 
         _, foot = kinematics(self.joints)
         planted = HEIGHT + foot[:, 2] <= CONTACT_Z
@@ -239,6 +260,7 @@ class Spider:
             "feet_before": self.feet_before.tolist(),
             "planted_before": [bool(p) for p in self.planted_before],
             "moments": self.moments, "recentres": self.recentres,
+            "motors": self.motors, "targets": self.targets.tolist(),
         }
 
     @classmethod
@@ -250,6 +272,8 @@ class Spider:
             feet_before=np.array(state["feet_before"], dtype=float).reshape(LEGS, 3),
             planted_before=np.array(state["planted_before"], dtype=bool),
             moments=int(state["moments"]), recentres=int(state.get("recentres", 0)),
+            motors=str(state.get("motors", "rate")),   # a world saved before the model existed is a rate body
+            targets=None if state.get("targets") is None else np.array(state["targets"], dtype=float).reshape(LEGS, 2),
         )
 
     def pose(self) -> dict:

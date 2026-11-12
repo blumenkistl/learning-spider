@@ -25,12 +25,17 @@ from typing import Any
 
 import numpy as np
 
-from .body import DT, HEIGHT, HIPS, JOINTS, LEGS, Spider
-from .brain import FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, make_policy
+from .body import DT, HEIGHT, HIPS, JOINTS, LEGS, MOTORS, Spider
+from .brain import FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, make_policy
 from .senses import DEFAULT as DEFAULT_SENSES, Senses
 
-PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full stroke speed of 0.2 m/s
+PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full stroke speed of 0.2 m/s;
+                        # one planted stroke moment all but reaches the cap, so four pushing feet pay
+                        # as one does; --pay-per-metre / PAY_PER_METRE set it (README, "The pay per metre")
 PROGRESS_CAP = 0.5      # the Robot Arena's cap, under the dopamine cap of 1.0
+BACKWARD_PAY = 0.0      # the share of the pay per metre charged for a metre backward: 0 leaves backward
+                        # free (the founder, README "The reward"), 1 charges it as forward pays;
+                        # --backward-pay / BACKWARD_PAY set it (README, "The backward pay")
 STANCE_FLOOR = LEGS // 2   # feet the world wants on the ground through every moment: half of them
 STANCE_PAY = 0.0        # taken per foot short of the floor: a hint, shaping, not an outcome; off by default,
                         # 0.1 is the measured dose (README, "The stance term"); --stance-pay / STANCE_PAY set it
@@ -50,8 +55,10 @@ CADENCE_VERSION = "0.97.1"
 
 
 def pay(progress: float, stance: int = STANCE_FLOOR, stance_pay: float = STANCE_PAY,
-        turn: float = 0.0, yaw_pay: float = YAW_PAY) -> float:
-    """Forward progress pays; backward and standing still pay zero; every foot short of
+        turn: float = 0.0, yaw_pay: float = YAW_PAY, per_metre: float = PROGRESS_PAY,
+        backward_pay: float = BACKWARD_PAY) -> float:
+    """Forward progress pays; backward and standing still pay zero (``backward_pay`` charges
+    backward progress that share of the forward pay, under the same cap); every foot short of
     ``STANCE_FLOOR`` planted through the moment takes ``stance_pay``, and every radian turned
     in the moment takes ``yaw_pay``. The progress term is the outcome. The stance and yaw terms
     are hints the world gives about posture and course (reward shaping): the stance term was
@@ -59,7 +66,8 @@ def pay(progress: float, stance: int = STANCE_FLOOR, stance_pay: float = STANCE_
     because progress along the body's own heading pays a circle as well as a line (README,
     "Measure it"). The first law paid backward progress negatively, and over 30,000 moments the
     learning brain lifted every foot to avoid it; forward-only pay was chosen by that reading."""
-    progress_term = float(np.clip(PROGRESS_PAY * progress, 0.0, PROGRESS_CAP))
+    gain = per_metre * (backward_pay if progress < 0 else 1.0)
+    progress_term = float(np.clip(gain * progress, -PROGRESS_CAP, PROGRESS_CAP))
     stance_term = stance_pay * max(0, STANCE_FLOOR - int(stance))
     yaw_term = yaw_pay * abs(float(turn))
     return float(np.clip(progress_term - stance_term - yaw_term, -PROGRESS_CAP, PROGRESS_CAP))
@@ -96,12 +104,21 @@ class Life:
         yaw_pay: float = YAW_PAY,
         window: int = PROGRESS_WINDOW,
         high_water: bool = HIGH_WATER,
+        pay_per_metre: float = PROGRESS_PAY,
+        motors: str = "rate",
+        backward_pay: float = BACKWARD_PAY,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self.high_water = bool(high_water)      # the progress term pays new ground only
         self.mark = 0.0                         # the farthest distance_forward reached: the high-water mark
         self.stance_pay = float(stance_pay)     # 0 switches the posture hint off
         self.yaw_pay = float(yaw_pay)           # 0 switches the course hint off
+        if float(pay_per_metre) <= 0:
+            raise ValueError(f"pay per metre must be positive, not {pay_per_metre}")
+        self.pay_per_metre = float(pay_per_metre)   # the progress term's gain; the cap stays
+        if not 0.0 <= float(backward_pay) <= 1.0:
+            raise ValueError(f"backward pay is a share of the forward pay, 0 to 1, not {backward_pay}")
+        self.backward_pay = float(backward_pay)     # 0 leaves backward free
         if int(window) < 1:
             raise ValueError(f"window must be at least 1 moment, not {window}")
         self.window = int(window)
@@ -112,8 +129,11 @@ class Life:
         self.senses = senses
         self.runs = Path(runs)
         self.pace = float(pace)                 # moments per second; 0 = as fast as possible
-        self.body = Spider()
-        self.policy = make_policy(policy, self.seed, brain_path, genes, backend)
+        if motors not in MOTORS:
+            raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
+        self.motors = str(motors)               # the body's motor model, the life's own; a saved life keeps its own
+        self.body = Spider(motors=self.motors)
+        self.policy = make_policy(policy, self.seed, brain_path, genes, backend, inputs=senses.inputs)
         self.reward: float | None = None        # the last executed command's outcome, not yet delivered
         self.moments = 0
         self.distance_forward = 0.0
@@ -154,7 +174,7 @@ class Life:
             self._progress.append(gained)
             paid = sum(self._progress) / self.window    # short of a full window the missing moments count as zero
             self.reward = pay(paid, outcome["stance"], self.stance_pay,
-                              outcome["turn"], self.yaw_pay)
+                              outcome["turn"], self.yaw_pay, self.pay_per_metre, self.backward_pay)
             self.turned += abs(outcome["turn"])
             if outcome["recentred"]:
                 self.recentres += 1
@@ -290,7 +310,7 @@ class Life:
             current.owed = (current.owed or 0.0) + self.reward   # the brain's last outcome stays its
             self.reward = None
         if name == "brain":
-            self.policy = brain if brain is not None else make_policy("brain", self.seed, None, self.genes, self.backend)
+            self.policy = brain if brain is not None else make_policy("brain", self.seed, None, self.genes, self.backend, inputs=self.senses.inputs)
             self._brain = None
         elif name == "random":
             self._keep_brain(brain)
@@ -301,7 +321,7 @@ class Life:
                 scratch = self.runs / "frozen-copy.npz"
                 self.policy = FrozenPolicy.copy_of(brain.brain, scratch, backend_of(self.backend).get("backend"))
             else:
-                self.policy = make_policy("frozen", self.seed, None, self.genes, self.backend)
+                self.policy = make_policy("frozen", self.seed, None, self.genes, self.backend, inputs=self.senses.inputs)
         else:
             raise ValueError(f"policy {name!r}: brain, random or frozen")
         self.switches += 1
@@ -374,7 +394,7 @@ class Life:
             return {"loaded": False, "why": f"{self.brain_file} does not exist"}
         with self.lock:
             where = backend_of(self.backend)
-            brain = SpiderBrain.load(self.brain_file, where.get("backend"))
+            brain = fitted(SpiderBrain.load(self.brain_file, where.get("backend")), self.senses.inputs, self.brain_file)
             self.policy = brain
             self._brain = None
             if self.sidecar.exists():
@@ -391,6 +411,9 @@ class Life:
                 self.turned = float(state.get("turned", 0.0))
                 self.recentres = int(state.get("recentres", 0))
                 self.body = Spider.restore(state["world"])
+                if self.body.motors != self.motors:
+                    self.notes.append(f"saved with {self.body.motors} motors, asked for {self.motors}: the saved life keeps its own")
+                    self.motors = self.body.motors
                 self._progress = deque([float(v) for v in state.get("progress_window", [])][-self.window:], maxlen=self.window)
                 self.blocks = deque(state.get("blocks", []), maxlen=BLOCKS_KEPT)
                 if state.get("cadence") != CADENCE_VERSION:
@@ -400,7 +423,7 @@ class Life:
                 # the brain's pending command is known, its outcome is not: it reads as an
                 # observed zero at the next moment, which is a break in custody, reported
                 self.reward = None
-                self.body = Spider()
+                self.body = Spider(motors=self.motors)
                 custody = "broken: no sidecar, the pending outcome is lost"
                 self.notes.append(custody)
             self._block = []
@@ -419,9 +442,9 @@ class Life:
             for path in (self.brain_file, self.sidecar, self.runs / "frozen-copy.npz"):
                 if path.exists():
                     path.unlink()
-            self.policy = make_policy("brain", self.seed, None, self.genes, self.backend)
+            self.policy = make_policy("brain", self.seed, None, self.genes, self.backend, inputs=self.senses.inputs)
             self._brain = None
-            self.body = Spider()
+            self.body = Spider(motors=self.motors)
             self.reward = None
             self.moments = 0
             self.distance_forward = 0.0
@@ -453,13 +476,14 @@ class Life:
             "seed": self.seed,
             "pace": self.pace,
             "dt": DT,
+            "motors": self.motors,
             "inputs": self.senses.inputs,
             "input_names": self.senses.input_names(),
             "joints": JOINTS,
             "legs": LEGS,
             "hips": HIPS.tolist(),
             "height": HEIGHT,
-            "reward": {"pay_per_metre": PROGRESS_PAY, "cap": PROGRESS_CAP,
+            "reward": {"pay_per_metre": self.pay_per_metre, "cap": PROGRESS_CAP, "backward_pay": self.backward_pay,
                        "stance_floor": STANCE_FLOOR, "stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay,
                        "window": self.window, "high_water": self.high_water,
                        "mark": round(self.mark, 4)},

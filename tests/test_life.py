@@ -58,6 +58,31 @@ def test_feet_short_of_four_take_pay():
     assert pay(-1.0, 0, **hint) == pytest.approx(-0.4)   # backward still pays zero progress
 
 
+def test_the_pay_per_metre_sets_the_gain_under_the_same_cap():
+    assert pay(0.01) == pytest.approx(0.4)               # the founder: 40 a metre, a stroke moment all but at the cap
+    assert pay(0.01, per_metre=10.0) == pytest.approx(0.1)
+    assert pay(0.04, per_metre=10.0) == pytest.approx(0.4)
+    assert pay(1.0, per_metre=10.0) == 0.5               # the cap stays
+    assert pay(-0.01, per_metre=10.0) == 0.0             # backward still pays zero
+    life = Life("random", seed=0, pace=0, runs="/nonexistent", pay_per_metre=10.0)
+    assert life.describe()["reward"]["pay_per_metre"] == 10.0
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs="/nonexistent", pay_per_metre=0.0)
+
+
+def test_backward_pay_charges_a_share_of_the_forward_pay():
+    assert pay(-0.01) == 0.0                                      # off by default: backward is free
+    assert pay(-0.01, backward_pay=1.0) == pytest.approx(-0.4)    # charged as forward pays
+    assert pay(-0.01, backward_pay=0.5) == pytest.approx(-0.2)
+    assert pay(0.01, backward_pay=1.0) == pytest.approx(0.4)      # forward unchanged
+    assert pay(-1.0, backward_pay=1.0) == -0.5                    # the cap holds
+    assert pay(-0.01, 0, stance_pay=0.1, backward_pay=1.0) == -0.5  # with the hint, still the cap
+    life = Life("random", seed=0, pace=0, runs="/nonexistent", backward_pay=0.5)
+    assert life.describe()["reward"]["backward_pay"] == 0.5
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs="/nonexistent", backward_pay=2.0)
+
+
 def test_turning_takes_pay_when_switched_on():
     assert pay(0.0, 4, turn=0.5) == 0.0                  # off by default
     assert pay(0.0, 4, turn=0.1, yaw_pay=0.1) == pytest.approx(-0.01)
@@ -313,3 +338,22 @@ def test_reset_starts_a_new_life_and_removes_the_save(tmp_path):
     assert life.control("load")["loaded"] is False            # nothing left to continue
     life.tick()
     assert life.moments == 1
+
+
+def test_a_saved_life_keeps_its_motor_model(tmp_path):
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target")
+    assert life.body.motors == "target" and life.describe()["motors"] == "target"
+    for _ in range(12):
+        life.tick()
+    life.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")       # asked for rate motors
+    assert again.load()["custody"] == "kept"
+    assert again.body.motors == "target" and again.motors == "target"          # the saved life keeps its own
+    assert any("target motors" in n for n in again.notes)
+    assert np.array_equal(again.body.targets, life.body.targets)
+    for _ in range(6):
+        assert life.tick()["pose"] == again.tick()["pose"]
+    again.reset()
+    assert again.body.motors == "target"                                        # a reset keeps the life's model
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs="/nonexistent", motors="servo")

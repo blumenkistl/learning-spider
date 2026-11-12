@@ -209,7 +209,25 @@ fetch('/api/describe').then(r => r.json()).then(d => {
     : `control: ${d.control && d.control.policy}`;
   if (b) openBrainView();
   else $('brainpanel-note').textContent = '· no brain in this life';
+  if (lastState) $('law').textContent = law(lastState);
+  $('motors').textContent = d.motors || 'rate';
 }).catch(() => {});
+
+// The reward law, from the settings the server described and the mark of the moment: "progress"
+// is the plain law (each moment's progress); a window pays the mean of the last N moments; the
+// high-water mark pays only ground beyond the farthest point reached, so the mark is shown with it.
+function law(m) {
+  const r = described && described.reward;
+  if (!r) return '—';
+  const parts = [r.window > 1 ? `window ${r.window}` : 'progress'];
+  if (r.pay_per_metre !== 40) parts.push(`${r.pay_per_metre}/m`);
+  if (r.backward_pay) parts.push(`backward ${r.backward_pay}`);
+  if (r.high_water) parts.push(`high-water · mark ${fmt(m.mark)} m`);
+  if (r.stance_pay) parts.push(`stance ${r.stance_pay}`);
+  if (r.yaw_pay) parts.push(`yaw ${r.yaw_pay}`);
+  return parts.join(' · ');
+}
+let lastState = null;
 
 // --- the brain view: the whole connectome in three dimensions, on the right -----------------
 // The view is the connectome demo's (static/vendor/brain_view.js); the payload is this brain's
@@ -265,6 +283,8 @@ function update(m) {
   $('net').textContent = fmt(m.distance_net) + ' m' + (m.recentres ? ` · recentred ${m.recentres}×` : '');
   $('speed').textContent = fmt(m.speed) + ' m/s';
   $('reward').textContent = fmt(m.reward, 3) + (m.owed !== null && m.owed !== undefined ? ` (owed ${fmt(m.owed, 3)})` : '');
+  lastState = m;
+  $('law').textContent = law(m);
   $('arousal').textContent = `${fmt(m.level, 2)} / ${fmt(m.want, 2)}`;
   $('sweeps').textContent = `${m.sweeps} (${m.learning_sweeps} learning)`;
   $('ms').textContent = fmt(m.ms, 1);
@@ -343,7 +363,7 @@ function strip(m) {
   }
   ctx.fillStyle = '#8b94a7';
   ctx.font = '9px system-ui';
-  ctx.fillText('sensory', 6, 11); ctx.fillText('association', 6, 45); ctx.fillText('motor ↓ hold ↑ per joint', 6, 91);
+  ctx.fillText('sensory', 6, 11); ctx.fillText('association', 6, 45); ctx.fillText(described && described.motors === 'target' ? 'motor: to low end · hold setpoint · to high end, per joint' : 'motor ↓ hold ↑ per joint', 6, 91);
 }
 function row(values, y, h, w, pad) {
   const cell = w / values.length;

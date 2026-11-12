@@ -21,7 +21,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .life import BLOCK, HIGH_WATER, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
+from .body import MOTORS
+from .life import BACKWARD_PAY, BLOCK, HIGH_WATER, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
 from .senses import Senses
 
 
@@ -75,7 +76,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 genes=genes, backend=args.backend, senses=senses,
                 brain_path=None if continuing else args.brain,
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
-                yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water)
+                yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water,
+                pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -133,6 +135,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "yaw_pay": args.yaw_pay,
         "window": args.window,
         "high_water": args.high_water,
+        "pay_per_metre": args.pay_per_metre,
+        "backward_pay": args.backward_pay,
+        "motors": life.motors,
         "per": senses.per,
         "blocks": rows,
     }
@@ -160,6 +165,12 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--high-water", action="store_true", default=HIGH_WATER,
                         help="pay new ground only: progress beyond the farthest point reached (default off)")
+    parser.add_argument("--pay-per-metre", type=float, default=PROGRESS_PAY,
+                        help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
+    parser.add_argument("--backward-pay", type=float, default=BACKWARD_PAY,
+                        help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
+    parser.add_argument("--motors", choices=MOTORS, default="rate",
+                        help="the body's motor model: rate (the founder) or target, position servos (default rate)")
     parser.add_argument("--backend", default=None, help="auto (default), cpu, torch or torch:<device>")
     parser.add_argument("--json", type=Path, default=None, help="write the summary here")
     parser.add_argument("--quiet", action="store_true")

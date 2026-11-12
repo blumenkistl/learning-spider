@@ -278,3 +278,74 @@ def test_rocking_on_a_knee_moves_nothing():
         assert out["progress"] == 0.0 and out["stance"] == LEGS
     assert spider.x == 0.0 and spider.y == 0.0 and spider.heading == 0.0
 
+
+
+def test_target_motors_are_servos_with_a_kept_setpoint():
+    """Under target motors one command sets a joint's setpoint to an end of its range and
+    hold keeps it: the joint then travels there at its rate over the following moments,
+    where the founder's rate motors need the command every moment."""
+    spider = Spider(motors="target")
+    cmd = hold()
+    cmd[0] = cmd[2] = 2                     # legs 0 and 1: hip setpoints to the front end
+    spider.step(cmd)
+    assert spider.targets[1, 0] == HIP_RANGE[1]
+    assert spider.joints[1, 0] == pytest.approx(1.5 * 0.05)   # one moment at the hip's rate
+    for _ in range(20):
+        spider.step(hold())                 # hold keeps the setpoint, the joint keeps going
+    assert spider.joints[1, 0] == pytest.approx(HIP_RANGE[1])
+    assert spider.targets[1, 0] == HIP_RANGE[1]
+    # a servo holds its setpoint against the stop: leg 1 sent forward alone against a leg 0
+    # held at rest settles at the stop short of its range, where under rate motors the
+    # split pushed the held leg 0 along
+    alone = Spider(motors="target")
+    cmd = hold(); cmd[2] = 2
+    alone.step(cmd)
+    for _ in range(30):
+        alone.step(hold())
+    assert alone.joints[1, 0] < HIP_RANGE[1] and alone.joints[0, 0] > 0
+    assert (SPLAY + alone.joints[:, 0])[1] - (SPLAY + alone.joints[:, 0])[0] == pytest.approx(LEG_CONVERGE)
+    cmd[2] = 0                              # back end
+    spider.step(cmd)
+    assert spider.targets[1, 0] == HIP_RANGE[0] and spider.joints[1, 0] < HIP_RANGE[1]
+    # the knee the same way: up, and down to the pressing end
+    cmd = hold(); cmd[1] = 2
+    for _ in range(25):
+        spider.step(cmd if _ == 0 else hold())
+    assert spider.joints[0, 1] == pytest.approx(KNEE_RANGE[1]) and not spider.planted()[0]
+    cmd[1] = 0
+    for _ in range(40):
+        spider.step(cmd if _ == 0 else hold())
+    assert spider.joints[0, 1] == pytest.approx(KNEE_RANGE[0]) and spider.planted()[0]
+    # the leg stop holds under servos too: a setpoint past the stop is not reached
+    spider = Spider(motors="target")
+    cmd = hold(); cmd[0] = 0; cmd[2] = 2
+    spider.step(cmd)
+    for _ in range(30):
+        spider.step(hold())
+        assert not legs_cross(spider, 0, 1)
+    yaw = SPLAY + spider.joints[:, 0]
+    assert yaw[1] - yaw[0] == pytest.approx(LEG_CONVERGE)
+
+    # the founder's rate motors are unchanged by the model's existence
+    rate = Spider()
+    cmd = hold(); cmd[2] = 2
+    rate.step(cmd)
+    rate.step(hold())
+    assert rate.joints[1, 0] == pytest.approx(1.5 * 0.05)    # hold holds the joint, not a setpoint
+    assert rate.motors == "rate"
+    with pytest.raises(ValueError):
+        Spider(motors="servo")
+
+
+def test_the_motor_model_and_its_setpoints_survive_the_world_state():
+    spider = Spider(motors="target")
+    cmd = hold(); cmd[2] = 2; cmd[5] = 0
+    spider.step(cmd)
+    again = Spider.restore(spider.state_dict())
+    assert again.motors == "target" and np.array_equal(again.targets, spider.targets)
+    for _ in range(5):
+        a = spider.step(hold()); b = again.step(hold())
+        assert a == b and np.array_equal(spider.joints, again.joints)
+    # a world saved before the model existed is a rate body
+    old = Spider().state_dict(); del old["motors"]; del old["targets"]
+    assert Spider.restore(old).motors == "rate"

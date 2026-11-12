@@ -327,8 +327,9 @@ class SpiderBrain:
         return self._connectome
 
     @classmethod
-    def newborn(cls, seed: int = 0, genes: dict[str, Any] | None = None, **where: Any) -> "SpiderBrain":
-        return cls(compose(seed, genes, **where))
+    def newborn(cls, seed: int = 0, genes: dict[str, Any] | None = None, inputs: int = INPUTS,
+                **where: Any) -> "SpiderBrain":
+        return cls(compose(seed, genes, inputs=inputs, **where))
 
     @classmethod
     def load(cls, path: str | Path, backend: str | None = None) -> "SpiderBrain":
@@ -526,16 +527,33 @@ def make_policy(
     brain_path: str | Path | None = None,
     genes: dict[str, Any] | None = None,
     backend: str | None = None,
+    inputs: int = INPUTS,
 ) -> SpiderBrain | RandomPolicy | FrozenPolicy:
+    """The policy by name; a newborn brain is composed for ``inputs`` senses (the life's
+    senses, not the default: until 2026-11-12 ``--per`` changed the senses and not the brain,
+    and every moment of such a life was refused)."""
     where = backend_of(backend)
     if name == "random":
         return RandomPolicy(seed)
     if name == "brain":
         if brain_path is not None and Path(brain_path).exists():
-            return SpiderBrain.load(brain_path, where.get("backend"))
-        return SpiderBrain.newborn(seed, genes, **where)
+            return fitted(SpiderBrain.load(brain_path, where.get("backend")), inputs, brain_path)
+        return SpiderBrain.newborn(seed, genes, inputs=inputs, **where)
     if name == "frozen":
         if brain_path is not None and Path(brain_path).exists():
-            return FrozenPolicy.load(brain_path, where.get("backend"))
-        return FrozenPolicy(compose(seed, genes, **where))
+            return fitted(FrozenPolicy.load(brain_path, where.get("backend")), inputs, brain_path)
+        return FrozenPolicy(compose(seed, genes, inputs=inputs, **where))
     raise ValueError(f"policy {name!r}: brain, random or frozen")
+
+
+def fitted(policy, inputs: int, path: str | Path):
+    """The loaded policy, if its brain was composed for ``inputs`` senses; a saved brain's
+    input count is fixed, and one fed another count refuses every moment. The mismatch is
+    reported here, at the load, not moment by moment in a life that cannot act."""
+    have = int(policy.brain.inputs)
+    if have != int(inputs):
+        raise ValueError(
+            f"{path}: this brain was composed for {have} inputs, the senses give {inputs}; "
+            f"start with the --per of the saved life, another --runs, or Reset the life"
+        )
+    return policy
