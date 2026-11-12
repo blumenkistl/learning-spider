@@ -104,7 +104,7 @@ class Life:
         self.senses = senses
         self.runs = Path(runs)
         self.pace = float(pace)                 # moments per second; 0 = as fast as possible
-        self.spider = Spider()
+        self.body = Spider()
         self.policy = make_policy(policy, self.seed, brain_path, genes, backend)
         self.reward: float | None = None        # the last executed command's outcome, not yet delivered
         self.moments = 0
@@ -130,11 +130,11 @@ class Life:
 
     def tick(self) -> dict[str, Any]:
         with self.lock:
-            observation = self.senses.observe(self.spider)
+            observation = self.senses.observe(self.body)
             reading = self.policy.moment(observation, self.reward)
             self.reward = None
-            before = (self.spider.x, self.spider.y)
-            outcome = self.spider.step(reading["commands"])
+            before = (self.body.x, self.body.y)
+            outcome = self.body.step(reading["commands"])
             self._progress.append(outcome["progress"])
             paid = sum(self._progress) / self.window    # short of a full window the missing moments count as zero
             self.reward = pay(paid, outcome["stance"], self.stance_pay,
@@ -177,12 +177,12 @@ class Life:
         reading = reading or {}
         return {
             "moments": self.moments,
-            "pose": self.spider.pose(),
-            "speed": round(self.spider.vx, 4),
-            "omega": round(self.spider.omega, 4),
+            "pose": self.body.pose(),
+            "speed": round(self.body.vx, 4),
+            "omega": round(self.body.omega, 4),
             "distance_forward": round(self.distance_forward, 4),
             "turned": round(self.turned, 3),
-            "distance_net": round(float(np.hypot(self.spider.x, self.spider.y)), 4),
+            "distance_net": round(float(np.hypot(self.body.x, self.body.y)), 4),
             "recentres": self.recentres,
             "reward": None if self.reward is None else round(self.reward, 4),
             "owed": None if getattr(self.policy, "owed", None) is None else round(float(self.policy.owed), 4),
@@ -246,7 +246,7 @@ class Life:
             elif op == "resume":
                 self.paused = False
             elif op == "recentre":
-                self.spider.recentre()
+                self.body.recentre()
                 self.recentres += 1
             elif op == "save":
                 return {"ok": True, **self.save()}
@@ -308,7 +308,7 @@ class Life:
     def brain(self) -> SpiderBrain | None:
         return self._live_brain()
 
-    def connectome(self) -> dict[str, Any] | None:
+    def spider(self) -> dict[str, Any] | None:
         """The live brain's connectome for the page's view; None when no brain is in this life."""
         brain = self._live_brain()
         return brain.connectome() if brain is not None else None
@@ -342,7 +342,7 @@ class Life:
                 "distance_forward": self.distance_forward,
                 "turned": self.turned,
                 "recentres": self.recentres,
-                "world": self.spider.state_dict(),
+                "world": self.body.state_dict(),
                 "progress_window": list(self._progress),
                 "blocks": list(self.blocks),
                 "saved_at": time.time(),
@@ -372,7 +372,7 @@ class Life:
                 self.distance_forward = float(state["distance_forward"])
                 self.turned = float(state.get("turned", 0.0))
                 self.recentres = int(state.get("recentres", 0))
-                self.spider = Spider.restore(state["world"])
+                self.body = Spider.restore(state["world"])
                 self._progress = deque([float(v) for v in state.get("progress_window", [])][-self.window:], maxlen=self.window)
                 self.blocks = deque(state.get("blocks", []), maxlen=BLOCKS_KEPT)
                 if state.get("cadence") != CADENCE_VERSION:
@@ -382,7 +382,7 @@ class Life:
                 # the brain's pending command is known, its outcome is not: it reads as an
                 # observed zero at the next moment, which is a break in custody, reported
                 self.reward = None
-                self.spider = Spider()
+                self.body = Spider()
                 custody = "broken: no sidecar, the pending outcome is lost"
                 self.notes.append(custody)
             self._block = []
@@ -403,7 +403,7 @@ class Life:
                     path.unlink()
             self.policy = make_policy("brain", self.seed, None, self.genes, self.backend)
             self._brain = None
-            self.spider = Spider()
+            self.body = Spider()
             self.reward = None
             self.moments = 0
             self.distance_forward = 0.0

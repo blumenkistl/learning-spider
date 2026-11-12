@@ -219,7 +219,7 @@ fetch('/api/describe').then(r => r.json()).then(d => {
 let brainView = null, flash = null;
 async function openBrainView() {
   try {
-    const payload = await (await fetch('/api/connectome')).json();
+    const payload = await (await fetch('/api/brainview')).json();
     if (!payload || brainView) return;
     brainView = new BrainView($('view-host'), payload, {
       // some forty fibres cross every pixel of the ball, so each one is faint and the tone

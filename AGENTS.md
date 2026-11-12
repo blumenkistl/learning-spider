@@ -60,7 +60,7 @@ without a page, for measurement.
 | The life: reward, blocks, custody, save/load, the loop thread | `spider/life.py` |
 | Headless measurement | `spider/nursery.py` |
 | The web server | `spider/server.py`, `server.py` |
-| The page | `static/index.html`, `static/app.js`, `static/style.css`; the 3D brain view is `static/vendor/brain_view.js` (the connectome demo's, unchanged) fed by `connectome_payload` in `spider/brain.py` |
+| The page | `static/index.html`, `static/app.js`, `static/style.css`; the 3D brain view is `static/vendor/brain_view.js` (the connectome demo's, unchanged) fed by `spider_payload` in `spider/brain.py` |
 | Tests | `tests/` (`python -m pytest tests -q`) |
 | Saved lives | `runs/` (gitignored) |
 

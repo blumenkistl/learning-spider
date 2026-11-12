@@ -61,14 +61,14 @@ async def test_websocket_frame(client):
     assert frame["moments"] == 3
 
 
-async def test_connectome_route(tmp_path):
+async def test_brainview_route(tmp_path):
     none = Life("random", seed=1, pace=0.0, runs=tmp_path)
     async with TestClient(TestServer(make_app(none))) as client:
-        assert await (await client.get("/api/connectome")).json() is None
+        assert await (await client.get("/api/brainview")).json() is None
     life = Life("brain", seed=1, pace=0.0, runs=tmp_path, backend="cpu")
     life.tick()
     async with TestClient(TestServer(make_app(life))) as client:
-        payload = await (await client.get("/api/connectome")).json()
+        payload = await (await client.get("/api/brainview")).json()
         assert payload["format"] == "cadence.zebrafish-skeletons/v1"
         assert len(payload["cells"]) == payload["counts"]["neurons"] == len(payload["order"])
         state = await (await client.get("/api/state")).json()

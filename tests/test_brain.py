@@ -177,7 +177,7 @@ def test_cuda_brain_lives_saves_and_reloads_on_cpu(tmp_path):
     assert not out["refused"] and len(out["commands"]) == JOINTS
 
 
-def test_connectome_payload_and_the_learning_levels():
+def test_spider_payload_and_the_learning_levels():
     """The page's brain view: one cell per neuron whose lines are its incoming synapses, and a
     per-neuron level of how much those synapses changed on a learning moment."""
     brain = SpiderBrain.newborn(0, backend="cpu")

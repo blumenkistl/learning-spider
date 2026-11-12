@@ -238,7 +238,7 @@ def _fibres(pos: np.ndarray, pre: np.ndarray, post: np.ndarray, rng: np.random.G
     return curve * AXES
 
 
-def connectome_payload(brain: Brain) -> dict[str, Any]:
+def spider_payload(brain: Brain) -> dict[str, Any]:
     """The whole connectome for the page's view: a cell per neuron, its skeleton the soma plus
     a fibre of FIBRE_NODES nodes per incoming synapse ending at the presynaptic soma;
     ``index`` is the neuron's index into the activity vector."""
@@ -319,7 +319,7 @@ class SpiderBrain:
     def connectome(self) -> dict[str, Any]:
         """The page's view payload, built once: the topology does not change in a life."""
         if self._connectome is None:
-            self._connectome = connectome_payload(self.brain)
+            self._connectome = spider_payload(self.brain)
         return self._connectome
 
     @classmethod

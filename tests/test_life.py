@@ -94,7 +94,7 @@ def test_save_and_load_continue_the_same_life(tmp_path):
     assert out["loaded"] and out["custody"] == "kept"
     assert again.moments == 12 and again.reward == life.reward
     assert again.turned == life.turned
-    assert again.spider.state_dict() == life.spider.state_dict()
+    assert again.body.state_dict() == life.body.state_dict()
     for _ in range(6):
         a = life.tick()
         b = again.tick()
@@ -160,8 +160,8 @@ def test_controls_and_random_life(tmp_path):
     assert life.moments == 200
     assert life.control("pause")["ok"] and life.paused
     assert life.control("resume")["ok"] and not life.paused
-    life.spider.x = 1.0
-    assert life.control("recentre")["ok"] and life.spider.x == 0.0
+    life.body.x = 1.0
+    assert life.control("recentre")["ok"] and life.body.x == 0.0
     assert life.control("pace", 0)["ok"] and life.pace == 0.0
     assert life.control("save")["saved"] is False            # a random life has no brain to save
     with pytest.raises(ValueError):
@@ -246,11 +246,11 @@ def test_reset_starts_a_new_life_and_removes_the_save(tmp_path):
     old = life.policy
     assert life.control("save")["saved"] and life.brain_file.exists() and life.sidecar.exists()
     assert life.control("policy", "random")["changed"]
-    life.spider.x = 1.0
+    life.body.x = 1.0
     r = life.control("reset")
     assert r["ok"] and r["reset"] and r["moments_before"] == BLOCK + 5
     assert isinstance(life.policy, SpiderBrain) and life.policy is not old and life.policy.moments == 0
-    assert life.moments == 0 and life.distance_forward == 0.0 and life.spider.x == 0.0
+    assert life.moments == 0 and life.distance_forward == 0.0 and life.body.x == 0.0
     assert life.reward is None and not life.blocks and life.last_save_at is None
     assert not life.brain_file.exists() and not life.sidecar.exists()
     assert life.latest["moments"] == 0 and life.latest["policy"] == "brain"

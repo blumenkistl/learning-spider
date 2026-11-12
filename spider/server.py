@@ -43,10 +43,10 @@ def make_app(life: Life) -> web.Application:
     async def describe(request: web.Request) -> web.Response:
         return web.json_response(life.describe())
 
-    async def connectome(request: web.Request) -> web.Response:
-        # the whole connectome laid out for the page's brain view, built once per brain (~0.5 MB)
+    async def brainview(request: web.Request) -> web.Response:
+        # the whole connectome laid out for the page's brain view, built once per brain (~1.5 MB)
         loop = asyncio.get_running_loop()
-        return web.json_response(await loop.run_in_executor(None, life.connectome))
+        return web.json_response(await loop.run_in_executor(None, life.spider))
 
     async def control(request: web.Request) -> web.Response:
         try:
@@ -79,7 +79,7 @@ def make_app(life: Life) -> web.Application:
     app.router.add_get("/", index)
     app.router.add_get("/api/state", state)
     app.router.add_get("/api/describe", describe)
-    app.router.add_get("/api/connectome", connectome)
+    app.router.add_get("/api/brainview", brainview)
     app.router.add_post("/api/control", control)
     app.router.add_get("/ws", socket)
     app.router.add_static("/static/", STATIC, show_index=False)

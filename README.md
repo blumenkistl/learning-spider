@@ -38,7 +38,7 @@ moment the brain learned, each neuron flashes by how much its incoming synapses 
 relative to the weight that was there (the demo's formula, gain 40), and the flash fades over
 the following frames. A calm brain is green only; the random control leaves the view at the
 last brain state. Drag to orbit, wheel to zoom, `fit` returns to the resting view, `spin`
-toggles the slow turn. The payload (`/api/connectome`, about 1.5 MB) is built once per brain;
+toggles the slow turn. The payload (`/api/brainview`, about 1.5 MB) is built once per brain;
 the per-moment cost of the flash is a copy of the weights before `live` and one difference
 after a learning moment, about 0.1 ms on this machine, inside the ms/moment the panel shows.
 
