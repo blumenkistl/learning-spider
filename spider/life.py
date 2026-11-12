@@ -552,10 +552,12 @@ class Life:
                     self.genes = dict(state["genes"]) or None    # the overrides the saved brain was composed with
                 if "senses" in state:
                     saved_senses = Senses(per=int(state["senses"]["per"]), setpoints=bool(state["senses"]["setpoints"]),
-                                          compass=bool(state["senses"].get("compass", False)))
+                                          compass=bool(state["senses"].get("compass", False)),
+                                          ground=bool(state["senses"].get("ground", False)))
                     if saved_senses.options() != self.senses.options():
                         self.notes.append(f"saved with {saved_senses.inputs} inputs" + (", setpoints sensed" if saved_senses.setpoints else "")
                                           + (", a compass" if saved_senses.compass else "")
+                                          + (", the ground sense" if saved_senses.ground else "")
                                           + f", asked for {self.senses.inputs}: the saved life keeps its own")
                         self.senses = saved_senses
             where = backend_of(self.backend)
@@ -610,14 +612,14 @@ class Life:
         continuing life, taken only on the page's Reset after the person confirmed it.
 
         ``birth`` names the newborn: ``seed``, ``genes`` (overrides, a dict or the nursery's
-        ``name=value`` words in one string), ``motors``, ``setpoints`` and ``compass``; what it
+        ``name=value`` words in one string), ``motors``, ``setpoints``, ``compass`` and ``ground``; what it
         leaves out stays as the life had it. Genes are composed once, at birth, which is why
         they are set here and nowhere else. The law is the life's and stays as it is; under
         the course law the distance along the course and the mark start at zero."""
         birth = dict(birth or {})
-        unknown = sorted(set(birth) - {"seed", "genes", "motors", "setpoints", "compass"})
+        unknown = sorted(set(birth) - {"seed", "genes", "motors", "setpoints", "compass", "ground"})
         if unknown:
-            raise ValueError(f"a birth names seed, genes, motors, setpoints and compass, not {', '.join(unknown)}")
+            raise ValueError(f"a birth names seed, genes, motors, setpoints, compass and ground, not {', '.join(unknown)}")
         seed = int(birth.get("seed", self.seed))
         genes = birth.get("genes", self.genes)
         if isinstance(genes, str):
@@ -629,10 +631,11 @@ class Life:
             raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
         setpoints = bool(birth.get("setpoints", self.senses.setpoints))
         compass = bool(birth.get("compass", self.senses.compass))
+        ground = bool(birth.get("ground", self.senses.ground))
         if setpoints and motors != "target":
             raise ValueError("the setpoint senses need target motors")
-        senses = self.senses if (setpoints, compass) == (self.senses.setpoints, self.senses.compass) \
-            else Senses(per=self.senses.per, setpoints=setpoints, compass=compass)
+        senses = self.senses if (setpoints, compass, ground) == (self.senses.setpoints, self.senses.compass, self.senses.ground) \
+            else Senses(per=self.senses.per, setpoints=setpoints, compass=compass, ground=ground)
         newborn = make_policy("brain", seed, None, genes, self.backend, inputs=senses.inputs)   # composed before the old life ends
         with self.lock:
             was = self.moments
@@ -660,11 +663,12 @@ class Life:
             self.last_save_at = None
             self.loaded_from = None
             born = f"seed {self.seed}, {self.motors} motors" + (", setpoints sensed" if setpoints else "") \
-                + (", a compass" if compass else "") + (f", genes {gene_words(genes)}" if genes else ", founder genes")
+                + (", a compass" if compass else "") + (", the ground sense" if ground else "") \
+                + (f", genes {gene_words(genes)}" if genes else ", founder genes")
             self.notes = [f"reset after {was} moments: a newborn brain of {born}"]
             self.latest = self.snapshot(None)
         return {"reset": True, "moments_before": was, "seed": self.seed, "genes": genes or {}, "motors": self.motors,
-                "setpoints": setpoints, "compass": compass}
+                "setpoints": setpoints, "compass": compass, "ground": ground}
 
     def _maybe_autosave(self) -> None:
         if self.autosave_minutes <= 0 or not isinstance(self.policy, SpiderBrain):
@@ -683,6 +687,7 @@ class Life:
             "inputs": self.senses.inputs,
             "setpoints": self.senses.setpoints,
             "compass": self.senses.compass,
+            "ground": self.senses.ground,
             "input_names": self.senses.input_names(),
             "joints": JOINTS,
             "legs": LEGS,

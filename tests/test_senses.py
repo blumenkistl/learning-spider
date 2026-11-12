@@ -114,4 +114,35 @@ def test_the_compass_senses_the_heading():
     assert x.shape == (1, senses.inputs) and np.all(x >= 0.0) and np.all(x <= 1.0)
     both = Senses(setpoints=True, compass=True)
     assert both.inputs == 8 * 36 + LEGS and both.readings(Spider(motors="target")).shape == (36,)
-    assert not Senses().compass and Senses().options() == {"per": 8, "setpoints": False, "compass": False}
+    assert not Senses().compass and Senses().options() == {"per": 8, "setpoints": False, "compass": False, "ground": False}
+
+
+def test_the_ground_sense_reads_the_velocity_over_the_ground():
+    import math
+
+    senses = Senses(ground=True)
+    assert senses.inputs == 8 * 20 + LEGS and senses.input_names()[8 * 18] == "ground_vx@-0.30"
+    assert senses.options()["ground"] is True
+    spider = Spider()
+    assert np.allclose(senses.readings(spider)[18:], [0.0, 0.0])            # at rest
+    spider.vx, spider.vy = 0.2, 0.05                                         # moving forward and a little left
+    assert np.allclose(senses.readings(spider)[18:], [0.2, 0.05])           # facing the world's zero heading
+    spider.heading = math.pi / 2                                             # the same motion, facing world y
+    assert np.allclose(senses.readings(spider)[18:], [-0.05, 0.2])
+    assert np.allclose(spider.ground_velocity(), [-0.05, 0.2])
+    spider.heading = math.pi                                                 # facing back: forward is world -x
+    assert np.allclose(senses.readings(spider)[18:], [-0.2, -0.05])
+    x = senses.observe(spider)
+    assert x.shape == (1, senses.inputs) and np.all(x >= 0.0) and np.all(x <= 1.0)
+    everything = Senses(setpoints=True, compass=True, ground=True)
+    assert everything.inputs == 8 * 38 + LEGS and everything.readings(Spider(motors="target")).shape == (38,)
+    assert everything.input_names()[8 * 34] == "heading_cos@-1.00" and everything.input_names()[8 * 37] == "ground_vy@-0.30"
+    # what a step adds to the world position is the ground velocity times DT
+    from spider.body import DT
+    spider = Spider()
+    spider.vx, spider.vy, spider.heading = 0.1, 0.0, 0.3
+    before = (spider.x, spider.y)
+    out = spider.step([1] * 16)
+    vx, vy = spider.ground_velocity()
+    assert abs(out["moved"][0] - (spider.x - before[0])) < 1e-12 and abs(out["moved"][1] - (spider.y - before[1])) < 1e-12
+    assert abs(vx * DT - out["moved"][0]) < 0.05 * abs(out["moved"][0]) + 1e-9   # the velocity after the step, the same motion within the moment's decay

@@ -91,10 +91,10 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 mark and its leak, the gain, the backward charge and the course
 described under [the reward](#the-reward-spiderlifepy), `--motors`
 (`target` since 2026-11-12, `rate` before) for a newborn's body, `--setpoints` (off) to sense the servos' setpoints too
-and `--compass` (off) to sense the heading. An
-environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
+and `--compass` (off) to sense the heading, `--ground` (off) to sense the velocity over the
+ground. An environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
 `AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `OLD_GROUND`, `PAY_PER_METRE`,
-`BACKWARD_PAY`, `COURSE`, `MOTORS`, `SETPOINTS`, `COMPASS`) sets a flag's
+`BACKWARD_PAY`, `COURSE`, `MOTORS`, `SETPOINTS`, `COMPASS`, `GROUND`) sets a flag's
 default. A saved life is continued with its own genes, seed, senses, motors and law, each
 noted when a flag asked for another (a life saved before the sidecar carried the law, the seed
 and the senses takes them from the flags, as before), and the high-water mark of a life saved
@@ -216,6 +216,17 @@ the sense the course law can be read by (a brain without it is paid for a line i
 sense), an option of the senses like the setpoints, named in every reading made under it and
 measured under [the course](#the-course); the page's "next birth" has it as `compass`.
 
+`--ground` adds the ground sense: the body's velocity over the ground in the world's frame,
+x and y in m/s, through the same code (168 inputs; 184 with the compass). The forward speed
+and the compass give the brain its speed along its heading and the heading, and what the
+course law pays, the motion along a fixed world heading, is their product, which a code of
+tuned inputs read by one layer cannot take; the ground sense reads that motion from the
+world as two readings, and the course's pay is a fixed weighting of them, its cosine and
+sine. It reads the world and not the law: a body without a course has the same two
+readings. It is an option of the senses like the compass, named in every reading made under
+it and measured under [the ground sense](#the-ground-sense); the page's "next birth" has it
+as `ground`.
+
 ### The reward (`spider/life.py`)
 
 `reward = clip(40 × progress, 0, 0.5) − stance_pay × max(0, 4 − stance) − yaw_pay × |turn|`,
@@ -328,6 +339,7 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors rate      # the founder's rate motors (the default until 2026-11-12)
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --setpoints        # the servos' setpoints sensed too
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass  # pay the line of the birth heading, sensed by a compass
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass --ground  # and the velocity over the ground sensed too
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
@@ -1487,11 +1499,57 @@ course costs 4.8–5.4 ms a moment learning and 2.3–2.7 calm, the founder's. B
 they are named in every reading, and what the sway shows is that a line is the course with
 the backward pay on or a window, the next thing to measure.
 
+**The ground sense.** `--ground` ("The senses") gives the brain its velocity over the ground
+in the world's frame, two readings through the code: the motion the course law pays, read
+from the world instead of left to be computed as the product of the forward speed and the
+compass. Servos, gamma 0.99, seeds 0–2, 30,000 moments; with the course (0, the birth heading)
+and the compass, and with the entropy term at 0.1 beside them, the dose that went farthest
+under the course above; random under the course is the row above; frozen newborn and copies at
+3000 moments:
+
+| 30,000 moments, metres along the course (forward metres; course metres in the last 5000; rad turned; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (the founder, plain law; table above) | +0.876 (+1.69; +0.04; 150; 3.8 → 5.0; 0.00; 0.049) | +0.110 (+0.94; +0.03; 113; 3.1 → 3.9; 0.98; 0.025) | +0.841 (+0.67; +0.06; 107; 3.8 → 4.8; 0.99; 0.025) |
+| ground, plain law | +1.003 (+1.19; 0.00; 147; 4.2 → 3.4; 0.87; 0.032) | +3.004 (+2.74; −0.03; 133; 3.5 → 4.3; 0.96; 0.029) | +0.269 (+0.27; −0.06; 109; 4.7 → 4.4; 0.99; 0.024) |
+| course 0, ground | +0.741 (+1.06; +0.22; 154; 2.7 → 3.4; 0.92; 0.028) | +0.342 (+0.37; +0.03; 196; 2.7 → 3.4; 0.83; 0.029) | +0.594 (+0.66; −0.02; 114; 5.3 → 5.0; 0.99; 0.024) |
+| course 0, compass, ground | +0.370 (+0.64; −0.07; 134; 2.5 → 3.7; 0.97; 0.028) | +0.980 (+0.39; 0.00; 161; 3.9 → 3.0; 0.00; 0.046) | +0.760 (+0.90; 0.00; 134; 3.8 → 4.7; 0.97; 0.025) |
+| course 0, compass, ground, entropy 0.1 | +0.745 (+0.74; −0.34; 237; 3.5 → 4.0; 0.58; 0.047) | +7.942 (+6.49; +0.99; 203; 3.8 → 4.8; 0.39; 0.063) | +2.650 (+0.76; −0.08; 228; 3.5 → 6.0; 0.00; 0.048) |
+| course 0, compass, entropy 0.1, without the ground sense (table above) | +0.824 | +1.075 | +2.890 |
+| frozen newborn with compass and ground, 3000 moments, course metres | −0.083 | +0.024 | −0.066 |
+| frozen copies, 3000 moments, course metres (ground / course and ground / with compass / with compass and entropy) | 0.121 / 0.152 / 0.156 / −0.110 | 0.151 / 0.046 / −0.012 / −0.036 | 0.157 / 0.152 / 0.152 / −0.039 |
+| course 0, compass, ground, entropy 0.1, per 5000 moments, course / forward | +1.02 +0.43 +0.01 +0.17 −0.55 −0.34 / +1.06 +0.12 0.00 −0.15 −0.86 +0.56 | +1.73 +1.85 +1.19 +1.14 +1.04 +0.99 / +1.68 +2.01 +1.44 +1.25 +1.14 −1.04 | +0.78 +1.09 +0.96 −0.06 −0.06 −0.08 / +0.85 +0.45 −0.55 +0.02 +0.02 −0.02 |
+
+**Reading:** one life walks the line for its whole life, and it is one life. The course with
+the compass, the ground sense and the entropy term on seed 1 went 7.94 m along its birth
+heading in 30,000 moments, 6.49 forward, between +0.99 and +1.85 m along the course in every
+window of 5000, earning 0.049–0.063 a moment, half aroused (0.39–0.58) to the end, planting
+3.4–4.8 feet, turning 31–41 rad a window as the lives that go nowhere do: the farthest any
+life of this body has gone in 30,000 moments, and farther along a line than along its own
+heading, because in its last window it faced back (heading 2.58 rad at the end) and went on
+along the course pushing backward in its own frame, −1.04 m forward and +0.99 m along the
+line, which the course law pays and the plain law would have charged. Its frozen copy walks
+−0.04 m: the greedy answer of every entropy brain here goes backward (−0.11 / −0.04 / −0.04),
+so the walk is in the sampled policy, not in its mode, which is what the entropy term asks
+for. The other two seeds under the same genes are the course's usual: seed 2 went +2.65 m and
+fell calm at 15,100 moments into a sway (−0.06 to −0.08 a window), seed 0 wandered (+0.75).
+Without the entropy term the ground sense changes nothing the seeds do not: with the course
+and the compass +0.37 / +0.98 / +0.76 (seed 1 calm at 9200 into a sway), with the course alone
++0.74 / +0.34 / +0.59, and under the plain law +1.00 / +3.00 / +0.27 along the birth heading,
+where seed 1 walked 2.7 m forward in its first 15,000 moments and then stalled, aroused to the
+end. Against the same three genes without the ground sense (+0.82 / +1.08 / +2.89) the sense
+moved one seed from 1 m to 8 m and one from 2.9 m to 2.7 m: one seed is a life, not a dose,
+and whether the sense reads what the course pays is seeds 3–5 of this row, the next thing to
+measure, with the course's backward pay beside it. The copies without entropy walk
+0.12–0.16, the hip sweep; the newborn with both senses −0.08 to +0.02. 3.3–4.3 ms a moment
+learning, 2.3–2.6 calm. The sense stays off: it is an option named in every reading, and no
+default has a dose yet.
+
 What a next step would measure, each against the same controls and on the eight-legged body:
 the finer code with the stance term over a longer life, the one gene that moved the first
-block; and the course law with the backward pay at 1 or a window, so that the sway it
-leaves pays nothing along the line, with and without the compass, on seeds 3–5 with the entropy
-term at 0.1 beside it. The horizon past 0.99, the setpoints as senses, the
+block; the course with the compass, the ground sense and the entropy term at 0.1 on seeds
+3–5, the row whose seed 1 walked 7.9 m along its line, so that the row is a dose; and the
+course law with the backward pay at 1 or a window, so that the sway it leaves pays nothing
+along the line, with the same senses. The horizon past 0.99, the setpoints as senses, the
 leaking mark, the recall memory, the temperature, the actor's hold and maturity, and the
 observation codes (fixed and learned) are measured above and change nothing after the first
 block, the codes losing it; the critic's rate at 20 held one seed's slow

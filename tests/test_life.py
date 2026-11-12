@@ -534,3 +534,25 @@ def test_the_course_is_set_live_as_the_heading_held_and_is_saved(tmp_path):
     assert born["compass"] is False and life.senses.compass is False and life.distance_course == 0.0
     with pytest.raises(ValueError):
         life.reset({"heading": 1.0})
+
+
+def test_the_ground_sense_is_a_birth_option_saved_with_the_life(tmp_path):
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", senses=Senses(compass=True, ground=True),
+                course=0.0)
+    assert life.describe()["ground"] is True and life.describe()["inputs"] == 8 * 22 + 8
+    for _ in range(5):
+        life.tick()
+    life.save()
+    again = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")    # plain senses asked for
+    assert again.load()["custody"] == "kept"
+    assert again.senses.ground is True and again.senses.compass is True and again.policy.brain.inputs == 8 * 22 + 8
+    assert any("the ground sense" in note for note in again.notes)
+    for _ in range(3):
+        assert life.tick()["pose"] == again.tick()["pose"]
+    born = life.control("reset", {"ground": False})
+    assert born["ground"] is False and born["compass"] is True
+    assert life.senses.ground is False and life.senses.compass is True and life.policy.brain.inputs == 8 * 20 + 8
+    assert "a compass" in life.notes[0] and "ground" not in life.notes[0]
+    born = life.control("reset", {"ground": True, "compass": False})
+    assert life.senses.options() == {"per": 8, "setpoints": False, "compass": False, "ground": True}
+    assert "the ground sense" in life.notes[0] and life.policy.brain.inputs == 8 * 20 + 8

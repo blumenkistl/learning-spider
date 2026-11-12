@@ -33,7 +33,7 @@ HEAD = (f"{'moment':>7} {'forward_m':>9} {'r/moment':>8} {'aroused':>7} {'sweeps
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    senses = Senses(per=args.per or PER, setpoints=args.setpoints, compass=args.compass)
+    senses = Senses(per=args.per or PER, setpoints=args.setpoints, compass=args.compass, ground=args.ground)
     genes = genes_from(args.gene) or None
     runs = args.save.parent if args.save else Path("runs")
     name = args.save.stem if args.save else "spider"
@@ -108,6 +108,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "per": life.senses.per,
         "setpoints": life.senses.setpoints,
         "compass": life.senses.compass,
+        "ground": life.senses.ground,
         "blocks": rows,
     }
     if args.save and life.brain is not None:
@@ -130,6 +131,8 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help="sense the servos' setpoints too (needs --motors target; sixteen readings more)")
     parser.add_argument("--compass", action="store_true",
                         help="sense the heading too, its cosine and sine (two readings more): the sense the course law is read by")
+    parser.add_argument("--ground", action="store_true",
+                        help="sense the velocity over the ground in the world's frame too (two readings more): what the course law pays, read from the world")
     parser.add_argument("--stance-pay", type=float, default=STANCE_PAY,
                         help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
     parser.add_argument("--yaw-pay", type=float, default=YAW_PAY,

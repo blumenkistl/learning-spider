@@ -10,7 +10,7 @@ of the same meaning that sets its default: HOST (127.0.0.1), PORT (8080), POLICY
 SEED (0), PACE (20 moments/s), BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs),
 AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), OLD_GROUND (0), PAY_PER_METRE (40),
 BACKWARD_PAY (0) and COURSE (off), the reward's settings, MOTORS (target) for a newborn's body, SETPOINTS (0) to
-sense the servos' setpoints too and COMPASS (0) to sense the heading. A saved life in RUNS is continued, with its own genes, seed,
+sense the servos' setpoints too, COMPASS (0) to sense the heading and GROUND (0) to sense the velocity over the ground. A saved life in RUNS is continued, with its own genes, seed,
 senses, motors and law; shutdown saves it. The page's settings change the law on the living
 brain (control ``law``) and name the next birth (control ``reset`` with a value).
 """
@@ -131,6 +131,8 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
                         help="sense the servos' setpoints too, for a newborn (needs --motors target)")
     parser.add_argument("--compass", action="store_true", default=_flag("COMPASS", False),
                         help="sense the heading too (its cosine and sine), for a newborn: the sense the course law is read by")
+    parser.add_argument("--ground", action="store_true", default=_flag("GROUND", False),
+                        help="sense the velocity over the ground in the world's frame too, for a newborn: what the course law pays, read from the world")
     parser.add_argument("--stance-pay", type=float, default=float(env("STANCE_PAY", STANCE_PAY)),
                         help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
     parser.add_argument("--yaw-pay", type=float, default=float(env("YAW_PAY", YAW_PAY)),
@@ -163,7 +165,7 @@ def life_from(args: argparse.Namespace) -> Life:
         runs=args.runs,
         genes=genes_from(args.gene) or None,
         backend=args.backend,
-        senses=Senses(per=args.per or PER, setpoints=args.setpoints, compass=args.compass),
+        senses=Senses(per=args.per or PER, setpoints=args.setpoints, compass=args.compass, ground=args.ground),
         stance_pay=args.stance_pay,
         yaw_pay=args.yaw_pay,
         window=args.window,

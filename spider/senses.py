@@ -12,6 +12,15 @@ world, through the same code. Without it the brain senses its yaw rate and nothi
 is pointed, which is all the plain law asks of it; the course law (README, "The course") pays
 progress along a fixed world heading, and the compass is the sense that heading can be read
 from. It is an option named in every reading made under it (README, "The compass").
+
+``Senses(ground=True)`` adds the ground sense: the body's velocity over the ground in the
+world's frame, x and y in m/s, through the same code. The forward speed and the compass
+give the brain the heading and the speed along it, and what the course law pays, the motion
+along a fixed world heading, is their product, which a code of tuned inputs cannot take;
+the ground sense reads that motion from the world as two readings, and the course's pay is
+a fixed weighting of them (its cosine and sine). It reads the world, not the law: a body
+without a course has the same two readings. It is an option named in every reading made
+under it (README, "The ground sense").
 """
 
 from __future__ import annotations
@@ -33,18 +42,24 @@ SETPOINT_NAMES = [f"hip{i}_set" for i in range(LEGS)] + [f"knee{i}_set" for i in
 SETPOINT_RANGES = [HIP_RANGE] * LEGS + [KNEE_RANGE] * LEGS
 COMPASS_NAMES = ["heading_cos", "heading_sin"]     # the heading as a point on the circle: no seam at ±pi
 COMPASS_RANGES = [(-1.0, 1.0), (-1.0, 1.0)]
+GROUND_NAMES = ["ground_vx", "ground_vy"]          # the velocity over the ground in the world's frame, m/s
+GROUND_RANGES = [SPEED_RANGE, SPEED_RANGE]
 
 
 class Senses:
     """A fixed population code over the readings plus the planted flags; with ``setpoints``
     the servos' setpoints are readings too (only a body with target motors has them), with
-    ``compass`` the heading's cosine and sine."""
+    ``compass`` the heading's cosine and sine, with ``ground`` the velocity over the ground in
+    the world's frame."""
 
-    def __init__(self, per: int = PER, setpoints: bool = False, compass: bool = False):
+    def __init__(self, per: int = PER, setpoints: bool = False, compass: bool = False, ground: bool = False):
         self.setpoints = bool(setpoints)
         self.compass = bool(compass)
-        self.names = list(READING_NAMES) + (SETPOINT_NAMES if self.setpoints else []) + (COMPASS_NAMES if self.compass else [])
-        self.ranges = list(RANGES) + (SETPOINT_RANGES if self.setpoints else []) + (COMPASS_RANGES if self.compass else [])
+        self.ground = bool(ground)
+        self.names = (list(READING_NAMES) + (SETPOINT_NAMES if self.setpoints else [])
+                      + (COMPASS_NAMES if self.compass else []) + (GROUND_NAMES if self.ground else []))
+        self.ranges = (list(RANGES) + (SETPOINT_RANGES if self.setpoints else [])
+                       + (COMPASS_RANGES if self.compass else []) + (GROUND_RANGES if self.ground else []))
         self.code = PopulationCode(self.ranges, per=per)
         self.per = per
         self.inputs = self.code.inputs + LEGS
@@ -57,10 +72,12 @@ class Senses:
             own += [spider.targets[:, 0], spider.targets[:, 1]]
         if self.compass:
             own += [[np.cos(spider.heading), np.sin(spider.heading)]]
+        if self.ground:
+            own += [list(spider.ground_velocity())]
         return np.concatenate(own)
 
     def observe(self, spider: Spider) -> np.ndarray:
-        coded = self.code(self.readings(spider))                  # (1, per * 18; 34 with setpoints, 2 more with the compass)
+        coded = self.code(self.readings(spider))                  # (1, per * 18; 34 with setpoints, 2 more each with the compass and the ground sense)
         flags = spider.planted().astype(np.float64)[None, :]      # (1, 8)
         return np.concatenate([coded, flags], axis=1)
 
@@ -74,7 +91,7 @@ class Senses:
 
     def options(self) -> dict:
         """What a sidecar or a birth names of the senses, beside ``per``."""
-        return {"per": self.per, "setpoints": self.setpoints, "compass": self.compass}
+        return {"per": self.per, "setpoints": self.setpoints, "compass": self.compass, "ground": self.ground}
 
 
 DEFAULT = Senses()

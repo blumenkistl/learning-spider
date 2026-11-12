@@ -44,7 +44,9 @@ without a page, for measurement.
   same outcome, the moment's motion, measured along one fixed heading of the world instead of
   along the body's own, so that a circle nets nothing; the brain reads that heading through
   the compass sense (`--compass`, a birth option like the setpoints: the heading's cosine and
-  sine through the population code), and both are named in every reading made under them.
+  sine through the population code) and what it pays through the ground sense (`--ground`, a
+  birth option too: the velocity over the ground in the world's frame, two readings, which
+  read the world and not the law), and all three are named in every reading made under them.
   The page's "law, live" changes the eight settings on the living brain
   (`Life.set_law`, control `law`); a life whose law changed is a schedule, a different model
   from a life under one law, so every change is noted, counted on the page's law line,

@@ -247,6 +247,13 @@ class Spider:
         return {"progress": float(progress), "moved": (float(world[0]), float(world[1])), "turn": float(turn),
                 "stance": count, "recentred": recentred}
 
+    def ground_velocity(self) -> tuple[float, float]:
+        """The body's velocity over the ground in the world's frame, x and y in m/s: the
+        body-frame velocity turned by the heading. What a step adds to ``moved`` is this
+        times DT; a recentre does not touch it."""
+        world = rotation(self.heading) @ np.array([self.vx, self.vy])
+        return float(world[0]), float(world[1])
+
     def recentre(self) -> None:
         """Put the body back at the origin. Joints, heading, velocity and the contact history
         are kept: this is a change of place, not a new life."""
