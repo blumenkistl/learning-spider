@@ -308,6 +308,11 @@ class Life:
     def brain(self) -> SpiderBrain | None:
         return self._live_brain()
 
+    def connectome(self) -> dict[str, Any] | None:
+        """The live brain's connectome for the page's view; None when no brain is in this life."""
+        brain = self._live_brain()
+        return brain.connectome() if brain is not None else None
+
     # --- continuation ---------------------------------------------------------------------
 
     @property

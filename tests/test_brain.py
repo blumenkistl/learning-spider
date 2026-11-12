@@ -3,6 +3,7 @@ import pytest
 
 from spider.body import JOINTS, Spider
 from spider.brain import (
+    FIBRE_NODES,
     ACTIONS, SLOTS, FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, compose, genes_of,
     hold_commands, make_policy,
 )
@@ -174,3 +175,32 @@ def test_cuda_brain_lives_saves_and_reloads_on_cpu(tmp_path):
     assert back.describe()["age"] == life.describe()["age"]
     out = back.moment(observe(spider), reward)
     assert not out["refused"] and len(out["commands"]) == JOINTS
+
+
+def test_connectome_payload_and_the_learning_levels():
+    """The page's brain view: one cell per neuron whose lines are its incoming synapses, and a
+    per-neuron level of how much those synapses changed on a learning moment."""
+    brain = SpiderBrain.newborn(0, backend="cpu")
+    payload = brain.connectome()
+    assert payload["format"] == "cadence.zebrafish-skeletons/v1"
+    n = int(brain.brain.connectome.n)
+    assert len(payload["cells"]) == len(payload["order"]) == n
+    assert sum(c["n"] - 1 for c in payload["cells"]) == FIBRE_NODES * int(brain.brain.connectome.synapses)
+    assert payload["classes"][0] == "sensory" and payload["classes"][-1] == "motor"
+    for cell in payload["cells"]:
+        assert len(cell["xyz"]) == 3 * cell["n"] and len(cell["parent"]) == cell["n"]
+        assert (cell["n"] - 1) % FIBRE_NODES == 0   # a fibre of FIBRE_NODES nodes per synapse
+        for j, parent in enumerate(cell["parent"]):
+            assert parent == (-1 if j == 0 else 0 if (j - 1) % FIBRE_NODES == 0 else j - 1)
+        if cell["class"] == "sensory":
+            assert cell["n"] == 1                   # nothing projects onto a sense: a point
+    assert brain.connectome() is payload           # built once
+    x = np.random.default_rng(0).random((1, INPUTS))
+    reading = brain.moment(x, None)
+    assert len(reading["activity"]["all"]) == n and "repair" not in reading["activity"]
+    for _ in range(3):
+        reading = brain.moment(x, 0.3)             # a newborn is aroused: it learns
+    repair = np.asarray(reading["activity"]["repair"])
+    assert repair.shape == (n,) and 0.0 <= repair.min() and repair.max() <= 1.0
+    sensory = len(brain.brain.sensory_index)
+    assert repair[:sensory].max() == 0.0 and repair[sensory:].max() > 0.0

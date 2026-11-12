@@ -134,7 +134,155 @@ def activity(brain: Brain) -> dict[str, list[float]] | None:
         "sensory": [round(float(v), 2) for v in act[brain.sensory_index]],
         "association": [round(float(v), 2) for v in act[brain.association_index]],
         "motor": [round(float(v), 2) for v in act[brain.motor_index]],
+        "all": [round(float(v), 2) for v in act],          # every neuron, in connectome order
     }
+
+
+# --- the brain view: the connectome laid out for the page, and the moment's learning ----------
+# A synthetic layout, not an anatomy, but shaped like one: the neurons fill an ellipsoid, the
+# senses on its rear surface, the module a shell inside them, the association and prefrontal
+# regions in the core, the motor cortex a cap on the front, sixteen tight triplets. A neuron's
+# fibres are its incoming synapses, one curved fibre from each presynaptic soma, bulging toward
+# the surface so the ball reads as a body of fibres. The page's view (static/vendor/
+# brain_view.js, the connectome demo's) paints a neuron's fibres and soma green by its
+# activity and flashes them gold by how much its incoming synapses changed this moment.
+CONNECTOME_FORMAT = "cadence.zebrafish-skeletons/v1"   # the view's payload format, kept by name
+LEARNING_GAIN = 40.0      # the view's learning formula: level = sqrt(min(1, gain * sum|dw| / sum|w|))
+LEARNING_FLOOR = 1e-9
+AXES = np.array([1.0, 0.8, 0.7])      # the ellipsoid's semi-axes: x forward, the longest spans 2.0
+FIBRE_NODES = 3                       # segments per synapse: a quadratic curve sampled in thirds
+_LABELS = {"sensory": "senses", "association": "association", "prefrontal": "prefrontal", "motor": "motor"}
+_COLORS = {"sensory": [90, 209, 255], "association": [255, 214, 102], "prefrontal": [90, 220, 190],
+           "motor": [210, 255, 120]}
+_MODULE_COLOR = [103, 231, 142]
+_GOLDEN = np.pi * (3.0 - np.sqrt(5.0))
+
+
+def _populations(brain: Brain) -> list[tuple[str, np.ndarray]]:
+    """The connectome's populations in order, without the aliases (``motor/actions``)."""
+    return [(name, np.asarray(idx, dtype=np.int64))
+            for name, idx in dict(brain.connectome.populations).items() if "/" not in name]
+
+
+def _array(values: Any) -> np.ndarray:
+    """A float64 copy of a backend's array, a tensor on a device included."""
+    if hasattr(values, "detach"):
+        values = values.detach().cpu().numpy()
+    return np.array(values, dtype=np.float64, copy=True)
+
+
+def _band(m: int, lo: float, hi: float, radius: float, centre: float = 0.0) -> np.ndarray:
+    """``m`` points spread evenly over the band ``lo <= x <= hi`` of a sphere of ``radius``
+    centred at ``(centre, 0, 0)``: a Fibonacci spiral along x, uniform by Archimedes."""
+    x = lo + (hi - lo) * (np.arange(m) + 0.5) / m
+    r = np.sqrt(np.maximum(0.0, 1.0 - x * x))
+    t = np.arange(m) * _GOLDEN
+    return radius * np.stack([x, r * np.cos(t), r * np.sin(t)], axis=1) + np.array([centre, 0.0, 0.0])
+
+
+def _motor_cap(m: int) -> np.ndarray:
+    """The motor cortex on the front of the unit sphere: slots of three in a grid on the cap,
+    each slot's three answers a tight triangle."""
+    per = 3 if m % 3 == 0 else 1
+    slots = m // per
+    cols = int(np.ceil(np.sqrt(slots)))
+    rows = int(np.ceil(slots / cols))
+    out = []
+    for j in range(slots):
+        cy = -0.4 + 0.8 * (j % cols + 0.5) / cols
+        cz = -0.4 + 0.8 * (j // cols + 0.5) / rows
+        for k in range(per):
+            a = 2.0 * np.pi * k / 3.0
+            y, z = cy + 0.045 * np.cos(a) * (per > 1), cz + 0.045 * np.sin(a) * (per > 1)
+            out.append([np.sqrt(max(0.0, 1.0 - y * y - z * z)), y, z])
+    return np.array(out[:m])
+
+
+def connectome_layout(brain: Brain) -> np.ndarray:
+    """One position per neuron, (n, 3), inside the ellipsoid ``AXES``; deterministic."""
+    n = int(brain.connectome.n)
+    pos = np.zeros((n, 3))
+    rng = np.random.default_rng(0)
+    pops = _populations(brain)
+    modules = [name for name, _ in pops if name.startswith("module")]
+    for name, idx in pops:
+        m = len(idx)
+        if name == "sensory":
+            unit = _band(m, -1.0, 0.45, 1.0)                     # the rear surface
+        elif name in modules:                                    # shells inside the senses
+            k = modules.index(name)
+            unit = _band(m, -0.9, 0.5, 0.74 - 0.12 * k)
+        elif name == "association":
+            unit = _band(m, -1.0, 1.0, 0.36, centre=-0.1)        # the core
+        elif name == "prefrontal":
+            unit = _band(m, -1.0, 1.0, 0.28, centre=0.38)        # the core, toward the front
+        elif name == "motor":
+            unit = _motor_cap(m)                                 # the front cap
+        else:
+            unit = _band(m, -1.0, 1.0, 0.5)
+        pos[idx] = unit * AXES + rng.normal(0.0, 0.01, (m, 3))
+    return pos
+
+
+def _fibres(pos: np.ndarray, pre: np.ndarray, post: np.ndarray, rng: np.random.Generator) -> np.ndarray:
+    """One curved fibre per synapse, (synapses, FIBRE_NODES, 3): from the target's soma to the
+    source's, a quadratic curve whose control point sits outward of the chord, so fibres
+    sweep along the surface rather than through the centre; the last node is the source."""
+    a, b = pos[post] / AXES, pos[pre] / AXES                     # in the unit ball
+    mid = 0.5 * (a + b)
+    reach = np.maximum(np.linalg.norm(a, axis=1), np.linalg.norm(b, axis=1))
+    norm = np.linalg.norm(mid, axis=1) + 1e-9
+    c = mid * ((1.05 * reach) / norm)[:, None] + rng.normal(0.0, 0.03, mid.shape)
+    t = (np.arange(1, FIBRE_NODES + 1) / FIBRE_NODES)[None, :, None]
+    curve = (1 - t) ** 2 * a[:, None] + 2 * t * (1 - t) * c[:, None] + t ** 2 * b[:, None]
+    return curve * AXES
+
+
+def connectome_payload(brain: Brain) -> dict[str, Any]:
+    """The whole connectome for the page's view: a cell per neuron, its skeleton the soma plus
+    a fibre of FIBRE_NODES nodes per incoming synapse ending at the presynaptic soma;
+    ``index`` is the neuron's index into the activity vector."""
+    c = brain.connectome
+    n = int(c.n)
+    pre = np.asarray(c.pre, dtype=np.int64)
+    post = np.asarray(c.post, dtype=np.int64)
+    pos = connectome_layout(brain)
+    fibres = np.round(_fibres(pos, pre, post, np.random.default_rng(1)), 3)
+    pos = np.round(pos, 3)
+    order = np.argsort(post, kind="stable")
+    starts = np.searchsorted(post[order], np.arange(n + 1))
+    pops = _populations(brain)
+    classes = [name for name, _ in pops]
+    labels = {name: _LABELS.get(name, name.replace("_", " ")) for name in classes}
+    colors = {name: _COLORS.get(name, _MODULE_COLOR) for name in classes}
+    counts = {name: int(len(idx)) for name, idx in pops}
+    owner = np.empty(n, dtype=object)
+    for name, idx in pops:
+        owner[idx] = name
+    cells = []
+    for i in range(n):
+        mine = order[starts[i]:starts[i + 1]]
+        k = len(mine)
+        xyz = np.concatenate([pos[i][None], fibres[mine].reshape(-1, 3)]).ravel().tolist()
+        # node 0 is the soma; each fibre is a chain whose first node hangs off the soma
+        parent = [-1] + [0 if j % FIBRE_NODES == 0 else j for j in range(k * FIBRE_NODES)]
+        cells.append({
+            "id": f"{owner[i]}:{i}", "class": str(owner[i]), "index": i, "n": 1 + k * FIBRE_NODES,
+            "xyz": xyz, "parent": parent,
+        })
+    return {
+        "format": CONNECTOME_FORMAT, "classes": classes, "labels": labels, "colors": colors,
+        "counts": {"classes": counts, "neurons": n, "synapses": int(len(post))},
+        "order": list(range(n)), "cells": cells,
+    }
+
+
+def learning_levels(post: np.ndarray, before: np.ndarray, after: np.ndarray, n: int) -> np.ndarray:
+    """How much each neuron's incoming synapses changed, in [0, 1]: the view's formula, the
+    change relative to the weight mass that was there."""
+    change = np.bincount(post, weights=np.abs(after - before), minlength=n)
+    mass = np.bincount(post, weights=np.abs(before), minlength=n)
+    return np.sqrt(np.minimum(1.0, LEARNING_GAIN * change / (mass + LEARNING_FLOOR)))
 
 
 def placement(brain: Brain) -> dict[str, Any]:
@@ -164,6 +312,15 @@ class SpiderBrain:
         self.refusals = 0
         self.moments = 0
         self.last_error: str | None = None
+        connectome = getattr(brain, "connectome", None)                  # a test's stub has none
+        self._post = None if connectome is None else np.asarray(connectome.post, dtype=np.int64)
+        self._connectome: dict[str, Any] | None = None
+
+    def connectome(self) -> dict[str, Any]:
+        """The page's view payload, built once: the topology does not change in a life."""
+        if self._connectome is None:
+            self._connectome = connectome_payload(self.brain)
+        return self._connectome
 
     @classmethod
     def newborn(cls, seed: int = 0, genes: dict[str, Any] | None = None, **where: Any) -> "SpiderBrain":
@@ -197,6 +354,9 @@ class SpiderBrain:
         elif total is not None:
             self.owed = total               # nothing to credit yet; keep it for the next command
         action = None
+        # the synapses before this moment, for the view's learning flash (a copy: the compiled
+        # brain is rebound on a learning moment, so its weights array is not revisited)
+        before = _array(brain.brain.weights) if self._post is not None else None
         try:
             action = brain.live(observation, **feedback)
             if feedback:
@@ -221,6 +381,10 @@ class SpiderBrain:
         arousal = brain.arousal
         assert arousal is not None
         mode = reading.get("mode", arousal.mode)
+        act = activity(brain)
+        if act is not None and before is not None and reading.get("learned"):
+            levels = learning_levels(self._post, before, _array(brain.brain.weights), int(brain.connectome.n))
+            act["repair"] = [round(float(v), 2) for v in levels]
         return {
             "commands": [int(c) for c in np.atleast_1d(action[0])],
             "refused": False,
@@ -232,7 +396,7 @@ class SpiderBrain:
             "level": float(arousal.level),
             "ms": elapsed,
             "policy": self.policy,
-            "activity": activity(brain),
+            "activity": act,
         }
 
     def describe(self) -> dict[str, Any]:

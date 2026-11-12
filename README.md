@@ -27,6 +27,21 @@ just earned, arousal level and want, the sweeps of the last settle, milliseconds
 a learning bar, and a strip of the brain's settled state: sensory inputs, association units,
 and for each of the sixteen joints its three motor units with the chosen command outlined.
 
+On the right, the whole brain in three dimensions: every one of its 328 neurons and 18,016
+synapses, drawn by the connectome demo's view (`static/vendor/brain_view.js`, copied unchanged
+from cadence-demos). The layout is not an anatomy, only shaped like one: the neurons fill an
+ellipsoid, the senses on its rear surface, the module a shell inside them, the association and
+prefrontal regions in the core, the motor cortex a cap on the front as sixteen triplets; each
+neuron's fibres are its incoming synapses, one curved fibre from every presynaptic soma. Green
+is the settled state of the moment, the same vector the strip shows. Gold is learning: on a
+moment the brain learned, each neuron flashes by how much its incoming synapses changed,
+relative to the weight that was there (the demo's formula, gain 40), and the flash fades over
+the following frames. A calm brain is green only; the random control leaves the view at the
+last brain state. Drag to orbit, wheel to zoom, `fit` returns to the resting view, `spin`
+toggles the slow turn. The payload (`/api/connectome`, about 1.5 MB) is built once per brain;
+the per-moment cost of the flash is a copy of the weights before `live` and one difference
+after a learning moment, about 0.1 ms on this machine, inside the ms/moment the panel shows.
+
 The learning bar runs from "Brain Stall" (0) to "Learning" (100). It is the share of the last
 1000 moments the brain spent aroused, which under the arousal law is exactly when it learns;
 a calm brain answers greedily and changes nothing. It reads the arousal law, not the gait: a
@@ -477,7 +492,7 @@ reproduce them with the same seeds.
 | Path | What |
 | --- | --- |
 | `spider/` | body, senses, brain, life, nursery, server |
-| `static/` | the page; `static/vendor/three` is three.js r160 (MIT, licence included) |
+| `static/` | the page; `static/vendor/three` is three.js r160 (MIT, licence included); `static/vendor/brain_view.js` is the connectome demo's brain view (cadence-demos, GPL-3.0) |
 | `tests/` | `python -m pytest tests -q` |
 | `runs/` | saved lives (gitignored) |
 

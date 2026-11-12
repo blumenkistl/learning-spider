@@ -3,6 +3,7 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from '/static/vendor/three/jsm/controls/OrbitControls.js';
+import { BrainView } from '/static/vendor/brain_view.js';
 
 const PROSOMA = [0.15, 0.10, 0.06], PROSOMA_X = 0.01;       // the front part, which carries the legs
 const ABDOMEN = [0.14, 0.115, 0.10], ABDOMEN_X = -0.26, ABDOMEN_Z = 0.03;
@@ -206,7 +207,52 @@ fetch('/api/describe').then(r => r.json()).then(d => {
   $('brainline').textContent = b
     ? `${b.neurons} neurons · ${b.parameters} parameters · ${b.placement.backend}${b.placement.device ? ':' + b.placement.device : ''} ${b.placement.precision} · seed ${d.seed}`
     : `control: ${d.control && d.control.policy}`;
+  if (b) openBrainView();
+  else $('brainpanel-note').textContent = '· no brain in this life';
 }).catch(() => {});
+
+// --- the brain view: the whole connectome in three dimensions, on the right -----------------
+// The view is the connectome demo's (static/vendor/brain_view.js); the payload is this brain's
+// connectome laid out as an ellipsoid, senses at the back, motor cortex at the front, each
+// neuron's lines its incoming synapses. Every frame paints the settled state green and, on a learning
+// moment, flashes gold where incoming synapses changed; the flash fades over the next frames.
+let brainView = null, flash = null;
+async function openBrainView() {
+  try {
+    const payload = await (await fetch('/api/connectome')).json();
+    if (!payload || brainView) return;
+    brainView = new BrainView($('view-host'), payload, {
+      // some forty fibres cross every pixel of the ball, so each one is faint and the tone
+      // map's exposure low; the demo's colours would burn the ball white
+      spin: true, controls: 'legend', scale: 'auto', gamma: 0.8, floor: 0.05, exposure: 0.09,
+      rest: [0.0015, 0.01, 0.003], lit: [0.03, 0.2, 0.06], flash: [0.6, 0.22, 0.01],
+      somaRadius: 0.012, pointRadius: 0.8, pointDim: 0.35, fitScale: 0.95,
+    });
+    flash = new Float32Array(payload.order.length);
+    brainView.start();
+    $('brainpanel-note').textContent = `· ${payload.counts.neurons} neurons, ${payload.counts.synapses} synapses`;
+    window.addEventListener('resize', () => brainView.resize());
+    $('view-fit').addEventListener('click', () => brainView.fit());
+    $('view-spin').addEventListener('click', () => {
+      brainView.options.spin = !brainView.options.spin;
+      $('view-spin').classList.toggle('on', brainView.options.spin);
+    });
+  } catch (e) {
+    $('brainpanel-note').textContent = '· view unavailable';
+  }
+}
+const FLASH_FADE = 0.96;                              // per frame received, as the demo's page
+function paintBrain(m) {
+  if (!brainView) return;
+  const a = m.activity;
+  if (!a || !a.all) return;                           // the random control: the last brain state stays
+  const repair = a.repair;
+  for (let i = 0; i < flash.length; i++) {
+    const f = flash[i] * FLASH_FADE;
+    flash[i] = repair && repair[i] > f ? repair[i] : f < 0.01 ? 0 : f;
+  }
+  brainView.setActivity(a.all, flash);
+}
 
 function update(m) {
   draw(m.pose);
@@ -237,6 +283,7 @@ function update(m) {
   $('notes').textContent = m.notes.join('\n');
   learning(m);
   strip(m);
+  paintBrain(m);
 }
 
 // --- the learning bar: 0 "Brain Stall" to 100 "Learning" ------------------------------------
