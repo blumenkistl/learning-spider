@@ -60,9 +60,9 @@ next start, with the world's state and the outcome the brain had not yet receive
 and starting the server is not a new spider. Delete `runs/` for a newborn.
 
 Environment variables for the server: `PORT` (8080), `POLICY` (`brain`), `SEED` (0), `PACE`
-(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0), `YAW_PAY` (0) and
-`PROGRESS_WINDOW` (1), the reward's two hints and its window described under
-[the reward](#the-reward-spiderlifepy).
+(20), `BACKEND` (auto), `RUNS` (`runs`), `STANCE_PAY` (0), `YAW_PAY` (0), `PROGRESS_WINDOW` (1)
+and `HIGH_WATER` (0), the reward's two hints, its window and its high-water mark described
+under [the reward](#the-reward-spiderlifepy).
 
 For development against a checkout of the library: `.venv/bin/python -m pip install -e ../cadence`.
 
@@ -113,16 +113,25 @@ walking (the readings below); 0.3 is the measured compromise. The page draws tha
 body as a tarantula (front part, abdomen, coxae, bristles); only the hips, knees and feet are the
 world's. Until the tarantula body the femur was 0.10 m and the tibia 0.14 m; the readings below
 say which legs they were measured with. At knee 0 the foot is on the ground;
-below 0 the leg presses into it and touches it where the tibia crosses the ground plane, so a
-third of the knee's range keeps the foot planted. With at least two feet planted at both
-moments, the body's velocity relaxes toward the negated rigid two-dimensional fit (translation
-and yaw) of those feet's motion; with fewer, it decays.
+below 0 the knee presses the foot against it and the foot stays where a resting knee puts it,
+so a third of the knee's range keeps the foot planted and a press moves nothing. (Until
+2026-11-12 the pressed leg touched the ground where the tibia crossed the plane, a point that
+slid in under the knee as the press deepened; "The held foot" below has the readings of
+the change.) The feet planted at both moments carry the body when they support it: at least
+one on each side and three in all (`supported` in `spider/body.py`); then the body's velocity
+relaxes toward the negated rigid two-dimensional fit (translation and yaw) of those feet's
+motion. Standing on one side's feet alone, or on fewer than three, the body is down: its
+velocity decays and nothing pushes it. (Until 2026-11-12 any two planted feet carried it,
+so a body on two left feet stood and pushed; "The support rule" below has the readings of
+the change.)
 
 The first world had the foot planted only at knee exactly 0 and needed three feet. Over 3000
 moments the brain and the random policy both averaged under two planted feet and moved nothing
 (three seeds each, forward −0.03 to +0.04 m, random −0.07 to +0.03 m): the reward almost never
-appeared. The pressing range and the two-foot minimum are the smallest change that made the
-reward reachable; they were chosen by that probe, not by a physical argument. Beyond a radius of 5 m the body is recentred, which is a change of place, not a
+appeared. The pressing range and the two-foot minimum were the smallest change that made the
+reward reachable; they were chosen by that probe, not by a physical argument. The minimum is
+three feet across both sides again since 2026-11-12, this time by the physical argument that
+one side's feet cannot hold a body up, with the pressing range keeping it reachable. Beyond a radius of 5 m the body is recentred, which is a change of place, not a
 new life. No pitch or roll, no leg collisions, no friction model: the contact rule is a model
 chosen so that sliding and swinging do not pay and a gait does.
 
@@ -141,7 +150,13 @@ its end) and turn is the radians the heading changed. Backward, sideways and sta
 nothing. `done` is never true. `--window N` (`PROGRESS_WINDOW` for the server, default 1) replaces
 progress with the mean progress of the last N moments, so a sway that moves the body forward and
 back earns nothing over the window; the window is saved with the life. Its readings are under
-"The windowed reward" below; the default stays 1.
+"The windowed reward" below; the default stays 1. `--high-water` (`HIGH_WATER=1` for the
+server, default off) pays new ground only: the progress term is the metres the body's forward
+distance has gained beyond the farthest it ever reached, so a sway earns on its forward half
+once and never again, while every step onto new ground pays at once. The mark is the life's,
+saved in the sidecar and loaded with it (`mark` in the summary and the state); a save made
+before the mark existed starts it where the body stands. Its readings are under "The
+high-water mark" below.
 
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
 is paying for a posture and a course, not for an outcome. Both ship switched off
@@ -171,6 +186,7 @@ was chosen by that comparison.
 | modules | 64, 32 | chosen here; the Robot Arena uses 48, 24 on 32 inputs |
 | working trace | amplitude 0.3, decay 0.1, scale 12 | Robot Arena founder |
 | efference | off | Robot Arena founder |
+| heard history | none (the brain hears this moment only) | 0.97.1's default without recall |
 | episodic memory | on, consolidation 0.05 | Robot Arena founder |
 | recall memory | off | chosen here (a 0.97.1 default, off for cost) |
 | sensory scale | 4 | Robot Arena founder, unmeasured on 152 coded inputs |
@@ -181,7 +197,8 @@ was chosen by that comparison.
 
 328 neurons, 22,041 parameters. Candidate genes are set on the nursery with
 `--gene name=value` (`--gene modules=48,24`, `--gene arousal.need=0`, `--gene recall=true`,
-`--gene efference_amplitude=3`) and `--per N` for the population code.
+`--gene efference_amplitude=3`, `--gene history_decays=0,0.7,0.95`) and `--per N` for the
+population code.
 
 ### Backend
 
@@ -202,6 +219,7 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --stance-pay 0.1  # the posture hint, measured dose
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --yaw-pay 5     # charge turning too
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --window 20      # pay the mean progress of 20 moments
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --high-water     # pay new ground only
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
@@ -466,9 +484,132 @@ the shipped default is window 1 progress only, chosen for the unshaped reward, w
 stance dose and `--window` as opt-ins with these receipts. 4–5 ms a moment,
 since every moment learns.
 
+**The held foot.** The rocking above rode on a property of the contact model: a pressed
+leg touched the ground where the tibia crossed the plane, so a deepening press slid the
+contact point in under the knee and the rigid fit read that as a stroke. From 2026-11-12 a
+pressed foot stays where a resting knee puts it; only the hip swing moves a planted foot
+(`kinematics` in `spider/body.py`; the test `test_rocking_on_a_knee_moves_nothing`). Fresh
+brains on that body, 30,000 moments, splay 0.3, the same seeds; the rows above this
+paragraph were measured on the sliding foot:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| brain, progress only, sliding foot (table above) | +0.503 (0.00; 3.1 → 3.0; 0.00) | +0.044 (0.00; 2.5 → 2.5; 0.00) | +0.709 (0.00; 2.3 → 2.0; 0.00) |
+| brain, progress only, held foot | +0.206 (+0.02; 3.9 → 4.0; 0.00; 0.073) | +0.289 (+0.04; 2.8 → 3.1; 0.95; 0.030) | +0.432 (0.00; 2.8 → 3.0; 0.00; 0.044) |
+| brain, stance 0.1, sliding foot (table above) | +2.736 (+0.23; 3.4 → 2.9; 1.00) | +3.339 (+0.59; 2.3 → 1.4; 1.00) | +1.938 (+0.20; 2.8 → 2.9; 1.00) |
+| brain, stance 0.1, held foot | +0.354 (+0.05; 4.3 → 5.8; 1.00; 0.019) | −0.125 (−0.02; 3.3 → 5.0; 1.00; 0.018) | +0.275 (+0.05; 4.5 → 5.1; 1.00; 0.016) |
+| random, held foot | −0.931 (+0.39; 2.8 → 2.8; 0.070) | +0.182 (+0.51; 3.2 → 3.4; 0.075) | −0.258 (−0.54; 3.0 → 3.1; 0.066) |
+| frozen newborn, held foot, 3000 moments | +0.004 (4.0) | +0.042 (2.0) | −0.025 (6.0) |
+| frozen copy of the progress-only brain, 3000 moments | +0.090 (4.0) | +0.152 (4.0) | +0.073 (4.0) |
+| frozen copy of the stance brain, 3000 moments | +0.152 (8.0) | +0.149 (6.0) | +0.155 (6.5) |
+
+Two readings. First, the held foot closes the knee's lever and not the law's leak: seeds 0
+and 2 under progress only go calm within the first thousand moments and stay there on four
+feet with an income of 0.04–0.07 a moment and no displacement, and the replayed seed 0 is
+rocking on a hip (leg 5's hip swings back for +0.1 to +0.2 a moment and forward for
+nothing). Random earns the same 0.07 a moment for the same reason. Any back-and-forth
+movement of a planted foot is such an income under the forward-only law, and the body has
+sixteen of them. Second, the knee slide was also the stroke the stance-term walkers used:
+with it gone they keep five to six feet down, earn 0.02 a moment and walk 0.3 m where they
+walked 2–3 m, and the hip swing, now the only stroke, has not become a gait in 30,000
+moments. Their frozen greedy copies move 0.15 m in their first block and then stand on six
+to eight feet: 0.15 m is one sweep of every hip to its back limit (the body makes 0.152 m
+from rest that way), which is the greedy answer of every raised brain in this table and the
+next, and not a gait. The held foot is the physical rule
+and the shipped one; the reading says the forward-only law needs a term that a sway cannot
+earn before any body can show a gait, and that a knee that can stroke was doing work the
+hip has not learned to do. 3–5 ms a moment.
+
+**The rhythm genes.** Two genes give the brain a sense of its own timing without a controller:
+`efference_amplitude=3` (an efference copy of its last command, 48 neurons; the Robot Arena's
+operating point has it at 0, this brain's founder too) and `history_decays=0,0.7,0.95` (three
+echoes of the senses at three decays, 456 neurons; the founder hears this moment only). Fresh
+brains, held foot, progress only, 30,000 moments, the same seeds; the progress-only row is the
+one from the table above:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| founder genes (table above) | +0.206 (+0.02; 3.9 → 4.0; 0.00; 0.073) | +0.289 (+0.04; 2.8 → 3.1; 0.95; 0.030) | +0.432 (0.00; 2.8 → 3.0; 0.00; 0.044) |
+| efference 3 | +0.626 (+0.10; 4.6 → 3.4; 0.92; 0.033) | +0.276 (+0.18; 2.1 → 1.9; 0.94; 0.023) | +0.376 (−0.01; 3.1 → 4.0; 0.98; 0.029) |
+| history 0, 0.7, 0.95 | +0.588 (+0.04; 3.8 → 3.6; 0.54; 0.042) | +0.218 (+0.08; 3.2 → 3.5; 0.96; 0.028) | +0.328 (+0.03; 4.0 → 3.8; 1.00; 0.024) |
+| both | +0.722 (0.00; 3.7 → 3.1; 0.93; 0.031) | +0.126 (−0.08; 4.5 → 2.6; 0.89; 0.031) | +0.169 (0.00; 3.3 → 3.0; 0.00; 0.068) |
+| frozen copies, 3000 moments | 0.154 / 0.089 / 0.152 | 0.147 / 0.148 / 0.160 | 0.154 / 0.154 / 0.154 |
+
+**Reading:** either gene keeps the brain aroused where the founder went calm (five of the six
+single-gene runs are over 0.9 aroused in their last 5000 moments, the sixth 0.54), and on seed
+0 it triples the life's distance (0.2 to 0.6 m); on seeds 1 and 2 the distance is the founder's
+or less, and no run makes more than 0.2 m in its last 5000 moments. Both genes together send
+seed 2 calm at 0.068 a moment, the rocking's income. The frozen copies, one hip sweep each, are
+the same answer as the founder's. A sense of timing did not make the hip swing a gait and did
+not close the law's leak; the genes stay options (`--gene`), the founder stays at 0 and none.
+4.8 ms a moment with the efference copy, 5.6 with the history, 5.7 with both.
+
+**The high-water mark.** `--high-water` pays new ground only: the progress term is the
+metres gained beyond the farthest the body's forward distance has ever reached, so the
+rocking's income is gone by construction (the tests
+`test_high_water_pays_new_ground_and_not_a_sway` and `test_save_carries_the_high_water_mark`).
+Random under it earns 0.000 a moment where it earned 0.07 under the plain law. Fresh brains,
+held foot, 30,000 moments, the same seeds; the plain-law rows are the ones from "The held
+foot":
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| brain, progress only (table above) | +0.206 (+0.02; 3.9 → 4.0; 0.00; 0.073) | +0.289 (+0.04; 2.8 → 3.1; 0.95; 0.030) | +0.432 (0.00; 2.8 → 3.0; 0.00; 0.044) |
+| brain, progress only, high-water | +0.019 (−0.03; 3.7 → 3.9; 1.00; 0.000) | −0.303 (−0.45; 1.9 → 2.2; 1.00; 0.000) | +0.394 (+0.28; 3.9 → 3.1; 0.99; 0.001) |
+| brain, stance 0.1 (table above) | +0.354 (+0.05; 4.3 → 5.8; 1.00; 0.019) | −0.125 (−0.02; 3.3 → 5.0; 1.00; 0.018) | +0.275 (+0.05; 4.5 → 5.1; 1.00; 0.016) |
+| brain, stance 0.1, high-water | +0.490 (+0.09; 4.2 → 4.8; 1.00; 0.000) | +0.015 (+0.04; 3.4 → 5.0; 1.00; 0.000) | −0.169 (−0.04; 4.6 → 5.2; 1.00; 0.000) |
+| random, high-water | −0.931 (+0.39; 2.8 → 2.8; 0.000) | +0.182 (+0.51; 3.2 → 3.4; 0.000) | −0.258 (−0.54; 3.0 → 3.1; 0.000) |
+| frozen copy of the high-water brain, 3000 moments | −0.028 (5.0) | +0.143 (2.0) | +0.078 (6.0) |
+| frozen copy of the high-water stance brain, 3000 moments | +0.079 (6.0) | +0.147 (5.0) | +0.051 (8.0) |
+
+**Reading:** the mark closes the leak and with it nearly all the income. The progress-only
+brains reach a mark of 0.41–0.52 m, earn 17–21 reward in a whole life, in 9–15 of 300
+blocks, which is what random earns (12–25, in 6–16 blocks); no run goes calm, every one is
+fully aroused to the end, and the body wanders at 0.3 m forward or back per 5000 moments
+with no trend and ends 0.0 to 0.4 m from where it started. Under the stance term the pay is
+negative almost throughout (−0.02 to −0.10 a moment at the start), the brain plants five feet
+and the mark is passed in 0–14 blocks. The frozen copies are the one hip sweep again. A
+reward a sway cannot earn is also, on this body, a reward that nothing the brain stumbles on
+earns: new ground needs a lift, a swing and a re-plant in order, and the search has not
+produced that sequence in 30,000 moments under any law. The mark is the honest accounting
+and stays an option; the shipped law stays the plain one. 4–5 ms a moment.
+
+**The support rule.** Until 2026-11-12 any two feet planted through the moment carried the
+body, so it stood and pushed on two left feet. Now the planted feet carry it only when they
+support it: at least one on each side and three in all (`supported` in `spider/body.py`; the
+test `test_one_side_cannot_hold_the_body_up`). Otherwise the body is down, its velocity
+decays and nothing pushes it, as before with fewer than two feet. Fresh brains, held foot,
+30,000 moments, the same seeds; the rows marked "two feet" are the ones from "The held foot":
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| brain, progress only, two feet (table above) | +0.206 (+0.02; 3.9 → 4.0; 0.00; 0.073) | +0.289 (+0.04; 2.8 → 3.1; 0.95; 0.030) | +0.432 (0.00; 2.8 → 3.0; 0.00; 0.044) |
+| brain, progress only, supported | +0.316 (−0.05; 4.5 → 3.9; 1.00; 0.024) | +0.167 (+0.05; 2.6 → 3.2; 1.00; 0.021) | +0.380 (0.00; 3.4 → 3.5; 1.00; 0.021) |
+| brain, stance 0.1, two feet (table above) | +0.354 (+0.05; 4.3 → 5.8; 1.00; 0.019) | −0.125 (−0.02; 3.3 → 5.0; 1.00; 0.018) | +0.275 (+0.05; 4.5 → 5.1; 1.00; 0.016) |
+| brain, stance 0.1, supported | +0.092 (−0.01; 4.0 → 4.6; 1.00; 0.021) | +0.222 (−0.01; 3.1 → 4.9; 1.00; 0.017) | **+24.942** (+4.49; 4.9 → 4.9; 0.00; 0.044) |
+| random, supported | +0.558 (+0.47; 2.8 → 2.8; 0.044) | +0.136 (+0.41; 3.2 → 3.4; 0.047) | +0.190 (−0.27; 3.0 → 3.1; 0.044) |
+| frozen newborn, supported, 3000 moments | +0.004 (4.0) | +0.011 (2.0) | −0.025 (6.0) |
+| frozen copy of the progress-only brain, 3000 moments | +0.155 (6.0) | +0.145 (4.0) | +0.153 (6.0) |
+| frozen copy of the stance brain, 3000 moments | +0.158 (6.0) | +0.149 (6.0) | **+1.664** (6.2) |
+
+**Reading:** one gait. Seed 2 under the stance term found a walk within its first 5000
+moments (2.5 m in them) and then repeats it: 4.49 m in every later 5000, 0.9 m per thousand
+moments, calm from the fifth thousand on, 4.9 feet planted, at 1.8 ms a moment since a calm
+brain learns nothing. Its frozen greedy copy walks too, 0.053 m in every block of 100 on 6.2
+feet, a third of the learner's speed and the first copy in these tables that does more than
+one hip sweep. Its reward is 0.044 a moment, which is what random earns on this body, and
+that is why it is calm: the walk earns the brain's need and the law sees no surprise left.
+The other five brains are where they were: 0.1–0.4 m, fully aroused, no trend. Random earns
+0.044 a moment here where it earned 0.07 on two feet, since a one-sided rock no longer pushes.
+Whether the gait is the support rule's or seed 2's luck, three seeds cannot say; the rule is
+the physical one and ships. 4 ms a moment aroused.
+
 What a next step would measure, each against the same controls and on the eight-legged body:
-a longer life under window 20 progress only, the one law whose runs were still moving at
-30,000 moments; a continuation of the 34 m brain;
+more seeds under the stance term on the supported body, to tell a found gait from one seed's
+luck; a continuation of the 24.9 m brain at a raised need (`--gene arousal.need=0.1`), to see
+whether a calm walker speeds up; a longer life under the high-water mark, the law under which
+the brain stays aroused without an income it did not earn, and the same under window 20
+progress only; a continuation of the 34 m brain;
 a course hint on the net heading drift over a window rather than the unsigned turn; a lower
 actor eta or a shorter eligibility (`--gene lam=`); module sizes (`--gene modules=48,24`); and
 the population code's resolution (`--per 16`).
@@ -484,8 +625,9 @@ reproduce them with the same seeds.
 ## Limits
 
 - The contact rule is a model: no pitch or roll, no body mass, no leg collisions, no slipping
-  except the decay with fewer than two feet planted. A gait that moves this body may not
-  move a physical one.
+  except the decay while the body is down (fewer than three feet planted, or none on one
+  side). A down body does not fall: its lifted legs stay where they are and it stands again
+  the moment its feet support it. A gait that moves this body may not move a physical one.
 - The reward is forward progress only; the brain is free to drift sideways and turn, and does.
 - The readings above are one machine and three seeds; they do not establish a learning rate,
   an efficiency, or a property of the library.

@@ -8,7 +8,9 @@ angle at a fixed rate; there is no controller between those commands and the joi
 A foot is planted when it is on the ground, which the knee reaches at and below its zero (a
 pressing leg touches the ground where its tibia crosses it). Propulsion is the negated rigid
 two-dimensional fit (translation and yaw) of every foot that was planted both at the previous
-moment and at this one, needing at least two such feet. A foot that is lifted pushes nothing;
+moment and at this one, when those feet support the body: at least one on each side and three
+in all (``supported``). Standing on one side's feet alone, the body is down and nothing pushes
+it. A foot that is lifted pushes nothing;
 a planted foot that does not move anchors the body; a closed joint cycle with the same planted
 set integrates to zero displacement. Moving forward therefore needs lifting, swinging and
 re-planting legs in a pattern: a gait, which is the brain's to find.
@@ -30,7 +32,7 @@ BODY = (0.15, 0.10, 0.06)               # ellipsoid semi-axes (x, y, z)
 HEAD_RADIUS = 0.06
 HEAD_X = 0.19                           # head sphere centre, body frame
 HEIGHT = 0.10                           # body centre above ground when standing
-SAG = 0.03                              # visual drop when fewer than STANCE_MIN feet are planted
+SAG = 0.03                              # visual drop when the planted feet do not support the body
 
 HIP_X = (0.12, 0.04, -0.04, -0.12)
 #                                       # left legs front->back, then right legs front->back
@@ -44,17 +46,27 @@ TIBIA = 0.20                            # knee -> foot (0.14 before)
 TIBIA_REST = math.acos((HEIGHT + FEMUR * math.sin(FEMUR_RISE)) / TIBIA)   # foot on the ground at knee 0
 
 HIP_RANGE = (-0.6, 0.6)                 # swing about the leg's resting yaw, + forward
-KNEE_RANGE = (-0.5, 1.0)                # lift: 0 foot on the ground, below 0 the leg presses into it
+KNEE_RANGE = (-0.5, 1.0)                # lift: 0 foot on the ground, below 0 the leg presses on it (foot held)
 HIP_RATE = 1.5                          # rad/s per commanded step
 KNEE_RATE = 2.5
 
 CONTACT_Z = 0.005                       # a foot this close to the ground is planted
-STANCE_MIN = 2                          # fewer planted feet than this push nothing (two fix translation and yaw)
+SUPPORT_SIDE = 1                        # planted feet a side needs for the body to stand ...
+SUPPORT_MIN = 3                         # ... and in all: one side's feet alone cannot hold it up (2026-11-12; two
+                                        # feet anywhere until then, "The support rule" in the README)
 GRIP = 10.0                             # 1/s: how fast the body takes the speed its feet impose
-SLIDE = 6.0                             # 1/s: velocity decay with too few feet planted
+SLIDE = 6.0                             # 1/s: velocity decay while the body is down
 ARENA_RADIUS = 5.0                      # beyond this the spider is recentred (not a reset)
 
 SIDE = np.array([1.0] * PER_SIDE + [-1.0] * PER_SIDE)   # +1 left, -1 right
+
+
+def supported(planted) -> bool:
+    """Whether these planted feet hold the body up: at least ``SUPPORT_SIDE`` on each side
+    and ``SUPPORT_MIN`` in all. A tripod needs both sides; a body on one side's feet tips."""
+    planted = np.asarray(planted, dtype=bool)
+    left, right = int(planted[:PER_SIDE].sum()), int(planted[PER_SIDE:].sum())
+    return min(left, right) >= SUPPORT_SIDE and left + right >= SUPPORT_MIN
 HIPS = np.array([(HIP_X[i % PER_SIDE], SIDE[i] * HIP_Y, 0.0) for i in range(LEGS)])
 SPLAY = np.array([HIP_SPLAY[i % PER_SIDE] for i in range(LEGS)])
 RATES = np.array([HIP_RATE, KNEE_RATE])
@@ -67,18 +79,16 @@ def kinematics(joints: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     of hip swing and knee lift. The body frame's origin is the body centre at ``HEIGHT``;
     a foot on the ground has ``z == -HEIGHT``."""
     theta = SPLAY + joints[:, 0]
-    beta = TIBIA_REST + joints[:, 1]
+    # A knee below zero presses the planted foot against the ground: the body's height is
+    # fixed, so the press lifts nothing, and the foot stays where a resting knee puts it. Until
+    # 2026-11-12 the pressed leg touched the ground where the tibia crossed the plane, a point
+    # that slid in under the knee as the press deepened; the learner rocked on that slide for
+    # a forward-only income without moving (README, "The rocking").
+    beta = TIBIA_REST + np.maximum(joints[:, 1], 0.0)
     d = np.stack([np.sin(theta), SIDE * np.cos(theta), np.zeros(LEGS)], axis=1)
     up = np.array([0.0, 0.0, 1.0])
     knee = HIPS + FEMUR * (math.cos(FEMUR_RISE) * d + math.sin(FEMUR_RISE) * up)
     foot = knee + TIBIA * (np.sin(beta)[:, None] * d - np.cos(beta)[:, None] * up)
-    # A leg pressed below the ground plane touches it where the tibia crosses it: the body's
-    # height is fixed, so the leg flexes against the ground instead of lifting the body.
-    below = foot[:, 2] < -HEIGHT
-    if np.any(below):
-        t = (-HEIGHT - knee[below, 2]) / (foot[below, 2] - knee[below, 2])
-        foot = foot.copy()
-        foot[below] = knee[below] + t[:, None] * (foot[below] - knee[below])
     return knee, foot
 
 
@@ -124,8 +134,8 @@ class Spider:
 
     @property
     def z(self) -> float:
-        """The body centre's drawn height: it sags when too few feet hold it up."""
-        return HEIGHT - (SAG if self.stance_count < STANCE_MIN else 0.0)
+        """The body centre's drawn height: it sags when the planted feet do not hold it up."""
+        return HEIGHT - (SAG if not supported(self.planted()) else 0.0)
 
     # --- one moment -----------------------------------------------------------------------
 
@@ -144,7 +154,7 @@ class Spider:
         planted = HEIGHT + foot[:, 2] <= CONTACT_Z
         stance = planted & self.planted_before
         count = int(stance.sum())
-        if count >= STANCE_MIN:
+        if supported(stance):
             now = foot[stance, :2]
             before = self.feet_before[stance, :2]
             delta = now - before
@@ -153,7 +163,7 @@ class Spider:
             dc = delta - delta.mean(axis=0)
             cross = float(np.sum(r[:, 0] * dc[:, 1] - r[:, 1] * dc[:, 0]))
             dot = float(np.sum(r * r)) + float(np.sum(r * dc))
-            yaw = -math.atan2(cross, dot) if count > 1 else 0.0
+            yaw = -math.atan2(cross, dot)
             v_push = translation / DT
             w_push = yaw / DT
             gain = min(1.0, GRIP * DT)

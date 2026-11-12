@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from spider.body import (
+    supported,
     ARENA_RADIUS, CONTACT_Z, HEIGHT, HIP_RANGE, JOINTS, KNEE_RANGE, LEGS, Spider, kinematics,
 )
 
@@ -59,6 +60,46 @@ def test_all_hips_sweeping_back_moves_forward_without_turning():
     assert progress > 0.01
     assert abs(spider.heading) < 1e-9
     assert abs(spider.y) < 1e-9
+
+
+def test_one_side_cannot_hold_the_body_up():
+    """Feet on one side alone, however many, are no support; one and two across the body are."""
+    assert supported([1, 1, 1, 1, 0, 0, 0, 0]) is False     # the whole left side
+    assert supported([1, 1, 0, 0, 0, 0, 0, 0]) is False
+    assert supported([1, 0, 0, 0, 1, 0, 0, 0]) is False     # one each side: two feet
+    assert supported([1, 0, 0, 0, 1, 1, 0, 0]) is True      # one left, two right
+    assert supported([0, 1, 1, 0, 0, 0, 0, 1]) is True
+    assert supported([1] * LEGS) is True
+
+    # the left feet stroke back while every right foot is lifted: the body is down and stays
+    spider = Spider()
+    cmd = hold()
+    for i in range(4, LEGS):
+        cmd[2 * i + 1] = 2                 # lift the right legs
+    for _ in range(10):
+        spider.step(cmd)
+    assert spider.stance_count == 4 and not supported(spider.planted()) and spider.z < HEIGHT
+    cmd = hold()
+    for i in range(4):
+        cmd[2 * i] = 0                     # stroke the left hips back
+    out = [spider.step(cmd) for _ in range(6)]
+    assert all(o["progress"] == 0.0 and o["stance"] == 4 for o in out)
+    assert spider.x == 0.0 and spider.heading == 0.0
+
+    # one right foot down too: the stroke pushes
+    spider = Spider()
+    cmd = hold()
+    for i in range(5, LEGS):
+        cmd[2 * i + 1] = 2                 # lift three right legs, leg 4 stays down
+    for _ in range(10):
+        spider.step(cmd)
+    assert supported(spider.planted()) and spider.z == HEIGHT
+    cmd = hold()
+    for i in range(4):
+        cmd[2 * i] = 0
+    for _ in range(6):
+        spider.step(cmd)
+    assert spider.x > 0.01 and spider.heading < 0   # the left stroke turns it too
 
 
 def test_lifted_legs_push_nothing():
@@ -163,17 +204,25 @@ def test_pose_shape():
     assert all(abs(HEIGHT + leg[5]) <= CONTACT_Z for leg in pose["legs"])
 
 
-def test_pressing_leg_touches_the_ground_where_the_tibia_crosses_it():
+def test_pressing_knee_holds_the_foot_where_it_is():
     from spider.body import CONTACT_Z, HEIGHT, kinematics
     rest = np.zeros((LEGS, 2))
     pressed = rest.copy()
     pressed[:, 1] = -0.3
-    knee_rest, foot_rest = kinematics(rest)
-    knee, foot = kinematics(pressed)
-    assert np.allclose(foot[:, 2], -HEIGHT)                       # on the ground, not below it
+    _, foot_rest = kinematics(rest)
+    _, foot = kinematics(pressed)
+    assert np.allclose(foot, foot_rest)                           # the press moves the foot nowhere
     assert np.all(HEIGHT + foot[:, 2] <= CONTACT_Z)               # planted
-    reach_rest = np.hypot(foot_rest[:, 0] - knee_rest[:, 0], foot_rest[:, 1] - knee_rest[:, 1])
-    reach = np.hypot(foot[:, 0] - knee[:, 0], foot[:, 1] - knee[:, 1])
-    assert np.all(reach < reach_rest)                             # the contact point moves in under the knee
     assert Spider(joints=pressed).stance_count == LEGS
+
+
+def test_rocking_on_a_knee_moves_nothing():
+    # the stalled brain's exploit: one knee pressing and resting in turn, every other joint held
+    spider = Spider()
+    for moment in range(40):
+        commands = hold()
+        commands[1] = 0 if moment % 2 == 0 else 2                 # leg 0's knee: press, rest, press, ...
+        out = spider.step(commands)
+        assert out["progress"] == 0.0 and out["stance"] == LEGS
+    assert spider.x == 0.0 and spider.y == 0.0 and spider.heading == 0.0
 
