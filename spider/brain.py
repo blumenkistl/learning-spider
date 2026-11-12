@@ -4,7 +4,11 @@
 association region exchanges signals with the motor cortex, and the working trace feeds the
 association region its own recent state. The motor cortex is sixteen slots of three neurons,
 one slot per joint: the settled state of the whole graph is read as one choice per joint
-(decrease, hold, increase), so every joint is commanded by the same equilibrium.
+(decrease, hold, increase), so every joint is commanded by the same equilibrium. That is the
+``joint`` layout, the founder's; under the ``leg`` layout (``layout="leg"``) the cortex is
+eight slots of nine, one per leg, each answer one of the nine pairs a leg's hip and knee can
+take. The same sixteen commands reach the body either way; what differs is what the brain
+chooses and is credited for: a joint, or a leg (README, "A slot per leg").
 
 The founder genes are the Robot Arena nursery's operating point (cadence-demos,
 ``robot-arena/arena/brain.py``) translated to cadence-net 0.97.1 names, with two choices made
@@ -30,11 +34,50 @@ from typing import Any
 import numpy as np
 from cadence import Brain
 
-from .body import JOINTS
+from .body import JOINTS, LEGS
 from .senses import INPUTS
 
-SLOTS = [3] * JOINTS
+LAYOUTS = ("joint", "leg")      # how the motor cortex is read: a slot per joint (three answers) or per leg (nine)
+DEFAULT_LAYOUT = "joint"        # the founder's layout; "leg" is measured in the README's "A slot per leg"
+SLOTS = [3] * JOINTS            # the joint layout's slots, the founder's
 ACTIONS = sum(SLOTS)
+
+
+def slots_of(layout: str) -> list[int]:
+    """The motor cortex's slots under a layout: ``joint`` reads sixteen slots of three, one
+    joint's decrease / hold / increase each; ``leg`` reads eight slots of nine, one leg's
+    pair of hip and knee commands, every pair of the same three a joint has. Both reach the
+    same sixteen commands; under ``leg`` a leg is one choice, not two, so a lift with a
+    swing, or a stroke, is one answer to credit (README, "A slot per leg")."""
+    if layout == "joint":
+        return [3] * JOINTS
+    if layout == "leg":
+        return [9] * LEGS
+    raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
+
+
+def layout_of(brain: Brain) -> str:
+    """The layout a composed brain was read by, from its slots."""
+    slots = list(brain.describe()["layout"]["slots"])
+    for layout in LAYOUTS:
+        if slots == slots_of(layout):
+            return layout
+    raise ValueError(f"a brain of slots {slots} is not this body's: {LAYOUTS} are {[slots_of(l) for l in LAYOUTS]}")
+
+
+def joint_commands(answer: Any, layout: str) -> list[int]:
+    """The sixteen joint commands (``0`` decrease, ``1`` hold, ``2`` increase, joint order
+    hip0, knee0, hip1, ...) a brain's answer names: under ``joint`` the answer itself; under
+    ``leg`` each leg's choice ``c`` of nine is its hip's ``c // 3`` and its knee's ``c % 3``."""
+    answer = [int(c) for c in np.atleast_1d(answer)]
+    if layout == "joint":
+        return answer
+    if layout == "leg":
+        out: list[int] = []
+        for c in answer:
+            out += [c // 3, c % 3]
+        return out
+    raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
 
 FOUNDER: dict[str, Any] = {
     # Robot Arena's founder (its nursery grids of 2026-10-08/09), copied:
@@ -154,14 +197,17 @@ def compose(
     genes: dict[str, Any] | None = None,
     *,
     inputs: int = INPUTS,
+    layout: str = DEFAULT_LAYOUT,
     backend: str | None = None,
     device: str | None = None,
 ) -> Brain:
-    """A newborn brain for this body: one slot per joint, one input per sense.
+    """A newborn brain for this body: one slot per joint (or per leg, under the ``leg``
+    layout), one input per sense.
 
     ``backend`` and ``device`` are passed only when given; otherwise the library's rule (or
     the environment variable ``CADENCE_BACKEND``) places the brain."""
     g = genes_of(genes)
+    slots = slots_of(layout)
     where: dict[str, Any] = {}
     if backend is not None:
         where["backend"] = backend
@@ -169,9 +215,9 @@ def compose(
         where["device"] = device
     return Brain.compose(
         int(inputs),
-        ACTIONS,
+        sum(slots),
         modules=tuple(int(w) for w in g["modules"]),
-        slots=SLOTS,
+        slots=slots,
         lateral=float(g["lateral"]),
         seed=int(seed),
         recall=bool(g["recall"]),
@@ -266,20 +312,22 @@ def _band(m: int, lo: float, hi: float, radius: float, centre: float = 0.0) -> n
     return radius * np.stack([x, r * np.cos(t), r * np.sin(t)], axis=1) + np.array([centre, 0.0, 0.0])
 
 
-def _motor_cap(m: int) -> np.ndarray:
-    """The motor cortex on the front of the unit sphere: slots of three in a grid on the cap,
-    each slot's three answers a tight triangle."""
-    per = 3 if m % 3 == 0 else 1
-    slots = m // per
-    cols = int(np.ceil(np.sqrt(slots)))
-    rows = int(np.ceil(slots / cols))
+def _motor_cap(m: int, slots: list[int] | None = None) -> np.ndarray:
+    """The motor cortex on the front of the unit sphere: the slots in a grid on the cap, each
+    slot's answers a tight ring (a triangle for a joint's three, a ring of nine for a leg's)."""
+    if slots is None or sum(slots) != m:
+        per = 3 if m % 3 == 0 else 1
+        slots = [per] * (m // per)
+    cols = int(np.ceil(np.sqrt(len(slots))))
+    rows = int(np.ceil(len(slots) / cols))
     out = []
-    for j in range(slots):
+    for j, per in enumerate(slots):
         cy = -0.4 + 0.8 * (j % cols + 0.5) / cols
         cz = -0.4 + 0.8 * (j // cols + 0.5) / rows
+        radius = 0.045 if per <= 3 else 0.07
         for k in range(per):
-            a = 2.0 * np.pi * k / 3.0
-            y, z = cy + 0.045 * np.cos(a) * (per > 1), cz + 0.045 * np.sin(a) * (per > 1)
+            a = 2.0 * np.pi * k / per
+            y, z = cy + radius * np.cos(a) * (per > 1), cz + radius * np.sin(a) * (per > 1)
             out.append([np.sqrt(max(0.0, 1.0 - y * y - z * z)), y, z])
     return np.array(out[:m])
 
@@ -305,7 +353,7 @@ def connectome_layout(brain: Brain) -> np.ndarray:
         elif name == "prefrontal":
             unit = _band(m, -1.0, 1.0, 0.28, centre=0.38)        # the core, toward the front
         elif name == "motor":
-            unit = _motor_cap(m)                                 # the front cap
+            unit = _motor_cap(m, list(brain.describe()["layout"].get("slots", [])))   # the front cap
         else:
             unit = _band(m, -1.0, 1.0, 0.5)
         pos[idx] = unit * AXES + rng.normal(0.0, 0.01, (m, 3))
@@ -396,6 +444,7 @@ class SpiderBrain:
 
     def __init__(self, brain: Brain) -> None:
         self.brain = brain
+        self.layout = layout_of(brain) if hasattr(brain, "describe") else DEFAULT_LAYOUT   # a test's stub has no layout
         self.owed: float | None = None  # an outcome kept: after a refusal, or while another policy acted
         self.refusals = 0
         self.moments = 0
@@ -412,8 +461,8 @@ class SpiderBrain:
 
     @classmethod
     def newborn(cls, seed: int = 0, genes: dict[str, Any] | None = None, inputs: int = INPUTS,
-                **where: Any) -> "SpiderBrain":
-        return cls(compose(seed, genes, inputs=inputs, **where))
+                layout: str = DEFAULT_LAYOUT, **where: Any) -> "SpiderBrain":
+        return cls(compose(seed, genes, inputs=inputs, layout=layout, **where))
 
     @classmethod
     def load(cls, path: str | Path, backend: str | None = None) -> "SpiderBrain":
@@ -475,7 +524,8 @@ class SpiderBrain:
             levels = learning_levels(self._post, before, _array(brain.brain.weights), int(brain.connectome.n))
             act["repair"] = [round(float(v), 2) for v in levels]
         return {
-            "commands": [int(c) for c in np.atleast_1d(action[0])],
+            "commands": joint_commands(action[0], self.layout),
+            "answer": [int(c) for c in np.atleast_1d(action[0])],   # the brain's own answer, one choice per slot
             "refused": False,
             "mode": mode,
             "aroused": mode == "aroused",
@@ -503,26 +553,32 @@ class SpiderBrain:
             "owed": self.owed,
             "pending": self.has_pending(),
             "placement": placement(self.brain),
+            "layout": self.layout,
             "genes": self.brain.describe().get("genes", {}),
         }
 
 
 class RandomPolicy:
-    """The uniform-random baseline with the same body: one draw per joint, every moment."""
+    """The uniform-random baseline with the same body: one draw per slot, every moment (a
+    uniform draw per leg of nine is the same distribution as a uniform draw per joint of
+    three, so the baseline is the same under either layout)."""
 
     policy = "random"
     learns = False
 
-    def __init__(self, seed: int = 0) -> None:
+    def __init__(self, seed: int = 0, layout: str = DEFAULT_LAYOUT) -> None:
         self.rng = np.random.default_rng(seed)
+        self.layout = layout
+        self.slots = slots_of(layout)
         self.moments = 0
         self.refusals = 0
         self.owed = None
 
     def moment(self, observation: np.ndarray, reward: float | None, done: bool = False) -> dict[str, Any]:
         self.moments += 1
+        answer = [int(self.rng.integers(size)) for size in self.slots]
         return {
-            "commands": [int(self.rng.integers(size)) for size in SLOTS],
+            "commands": joint_commands(answer, self.layout), "answer": answer,
             "refused": False, "mode": "random", "aroused": False, "sweeps": 0,
             "learning_sweeps": 0, "want": 0.0, "level": 0.0, "ms": 0.0, "policy": self.policy,
         }
@@ -534,7 +590,7 @@ class RandomPolicy:
         return None
 
     def describe(self) -> dict[str, Any]:
-        return {"policy": self.policy, "moments": self.moments}
+        return {"policy": self.policy, "moments": self.moments, "layout": self.layout}
 
 
 class FrozenPolicy:
@@ -545,6 +601,7 @@ class FrozenPolicy:
 
     def __init__(self, brain: Brain) -> None:
         self.brain = brain
+        self.layout = layout_of(brain)
         self.moments = 0
         self.refusals = 0
         self.owed = None
@@ -572,7 +629,8 @@ class FrozenPolicy:
             return _refused((time.perf_counter() - began) * 1000.0, self.policy)
         settlement = self.brain.last_settlement or {}
         return {
-            "commands": [int(c) for c in np.atleast_1d(action[0])],
+            "commands": joint_commands(action[0], self.layout),
+            "answer": [int(c) for c in np.atleast_1d(action[0])],
             "refused": False, "mode": "frozen", "aroused": False,
             "sweeps": int(settlement.get("steps", 0)), "learning_sweeps": 0,
             "want": 0.0, "level": 0.0, "ms": (time.perf_counter() - began) * 1000.0,
@@ -589,6 +647,7 @@ class FrozenPolicy:
         return {
             "policy": self.policy, "moments": self.moments, "refusals": self.refusals,
             "neurons": int(self.brain.connectome.n), "placement": placement(self.brain),
+            "layout": self.layout,
         }
 
 
@@ -612,21 +671,23 @@ def make_policy(
     genes: dict[str, Any] | None = None,
     backend: str | None = None,
     inputs: int = INPUTS,
+    layout: str = DEFAULT_LAYOUT,
 ) -> SpiderBrain | RandomPolicy | FrozenPolicy:
     """The policy by name; a newborn brain is composed for ``inputs`` senses (the life's
     senses, not the default: until 2026-11-12 ``--per`` changed the senses and not the brain,
-    and every moment of such a life was refused)."""
+    and every moment of such a life was refused) and read by ``layout``; a saved brain keeps
+    the layout it was composed with."""
     where = backend_of(backend)
     if name == "random":
-        return RandomPolicy(seed)
+        return RandomPolicy(seed, layout)
     if name == "brain":
         if brain_path is not None and Path(brain_path).exists():
             return fitted(SpiderBrain.load(brain_path, where.get("backend")), inputs, brain_path)
-        return SpiderBrain.newborn(seed, genes, inputs=inputs, **where)
+        return SpiderBrain.newborn(seed, genes, inputs=inputs, layout=layout, **where)
     if name == "frozen":
         if brain_path is not None and Path(brain_path).exists():
             return fitted(FrozenPolicy.load(brain_path, where.get("backend")), inputs, brain_path)
-        return FrozenPolicy(compose(seed, genes, inputs=inputs, **where))
+        return FrozenPolicy(compose(seed, genes, inputs=inputs, layout=layout, **where))
     raise ValueError(f"policy {name!r}: brain, random or frozen")
 
 

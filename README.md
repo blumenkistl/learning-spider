@@ -66,7 +66,8 @@ change is noted ("law changed at moment N: …, this life is a schedule"), count
 line ("a schedule: changed 2×"), reported by `/api/describe` as `law_changes` and saved with
 the life, so a continued life keeps the law it was last paid under, whatever flags the server
 was started with (a note says which). **next birth, on Reset** holds what Reset gives birth
-to: the seed, the motor model, whether the servos' setpoints are sensed (target motors only),
+to: the seed, the motor model, the motor layout (a slot per joint or per leg; measured in
+"A slot per leg"), whether the servos' setpoints are sensed (target motors only),
 the reward learner's three options from cadence's docs/reward.md as fields of their own (the
 actor's `hold`, its `entropy`, `maturity`; measured in "The reward learner's options"), the two
 observation codes of cadence's docs/senses.md as fields too (a fixed sparse `code`, a
@@ -75,7 +76,7 @@ the newborn's other genes in the nursery's words (`gamma=0.99 eta_critic=20 arou
 modules=48,24 recall=true`; empty is the founder). Genes are composed once, at birth, which is
 why they change nowhere else; the live brain's genes and seed are shown under the field. The
 confirmation names the birth, and the page reloads on the new life. The sidecar carries the
-seed, the senses and the gene overrides of such a birth, so the server continues it on the next
+seed, the senses, the layout and the gene overrides of such a birth, so the server continues it on the next
 start whatever its flags say; a brain file without its sidecar still needs the senses it was
 composed for.
 
@@ -90,12 +91,13 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--pay-per-metre` (40), `--backward-pay` (0) and `--course` (off), the two hints, the window, the high-water
 mark and its leak, the gain, the backward charge and the course
 described under [the reward](#the-reward-spiderlifepy), `--motors`
-(`target` since 2026-11-12, `rate` before) for a newborn's body, `--setpoints` (off) to sense the servos' setpoints too
+(`target` since 2026-11-12, `rate` before) for a newborn's body, `--layout` (`joint`; `leg` reads
+a newborn brain's answer a leg at a time, [the brain](#the-brain-spiderbrainpy)), `--setpoints` (off) to sense the servos' setpoints too
 and `--compass` (off) to sense the heading, `--ground` (off) to sense the velocity over the
 ground. An environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
 `AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `OLD_GROUND`, `PAY_PER_METRE`,
-`BACKWARD_PAY`, `COURSE`, `MOTORS`, `SETPOINTS`, `COMPASS`, `GROUND`) sets a flag's
-default. A saved life is continued with its own genes, seed, senses, motors and law, each
+`BACKWARD_PAY`, `COURSE`, `MOTORS`, `LAYOUT`, `SETPOINTS`, `COMPASS`, `GROUND`) sets a flag's
+default. A saved life is continued with its own genes, seed, senses, motors, layout and law, each
 noted when a flag asked for another (a life saved before the sidecar carried the law, the seed
 and the senses takes them from the flags, as before), and the high-water mark of a life saved
 without one starts where the body stands. A brain file without its sidecar has fixed senses:
@@ -109,7 +111,9 @@ For development against a checkout of the library: `.venv/bin/python -m pip inst
 
 - **One continuing brain in a body.** `Brain.compose(..., arousal=...)` once; then
   `brain.live(observation, reward=[r])` every moment for the rest of its life. Sixteen motor
-  slots of three choices each command the sixteen joints directly. There is no controller,
+  slots of three choices each command the sixteen joints directly (or, under `--layout leg`,
+  eight slots of nine, one per leg, the pairs of its two joints' choices: the same sixteen
+  commands, chosen a leg at a time). There is no controller,
   gait generator or inverse kinematics between the brain and the body.
 - **Learning from the world's outcome only.** The reward is forward progress along the body's
   own heading, capped. No target pose, no phase signal, no shaped terms. Youth and arousal
@@ -290,7 +294,7 @@ was chosen by that comparison.
 
 | Gene | Value | Origin |
 | --- | --- | --- |
-| inputs / motors | 152 / 48 (`slots=[3]*16`) | this body |
+| inputs / motors | 152 / 48 (`slots=[3]*16`; 72, `[9]*8`, under `--layout leg`) | this body |
 | modules | 64, 32 | chosen here; the Robot Arena uses 48, 24 on 32 inputs |
 | working trace | amplitude 0.3, decay 0.1, scale 12 | Robot Arena founder |
 | efference | off | Robot Arena founder |
@@ -306,7 +310,16 @@ was chosen by that comparison.
 | observation code / learned code (fields) | off / off (none): the cortex reads the coded senses themselves | cadence docs/senses.md, the library's founder values; measured in "The observation codes" |
 | arousal | threshold 0.2, decay 0.9, tolerance 2, floor 0.1, fast 0.05, slow 0.005, heat 2, youth 300, value surprise 1, need 0.05 | Robot Arena founder |
 
-328 neurons, 22,041 parameters. Candidate genes are set on the nursery with
+328 neurons, 22,041 parameters. The motor cortex is read by a layout, composed into the
+brain at birth and kept for its life (`--layout`, `LAYOUT`): `joint`, the founder, sixteen
+slots of three, one joint's decrease / hold / increase each; or `leg`, eight slots of nine,
+one per leg, each answer one of the nine pairs the leg's hip and knee commands can make
+(hip `c // 3`, knee `c % 3`). Both reach the body as the same sixteen commands and the body
+cannot tell them apart; what differs is the brain's choice and its credit: under `leg` a leg
+is one decision, so a lift with a swing, or a stroke, is one answer the outcome credits
+instead of two that must agree. It is not a controller (every pair stays reachable, nothing
+is chosen for the brain), but it is a different model, named in every reading made under it
+and measured in "A slot per leg". Candidate genes are set on the nursery with
 `--gene name=value` (`--gene modules=48,24`, `--gene arousal.need=0`, `--gene recall=true`,
 `--gene efference_amplitude=3`, `--gene history_decays=0,0.7,0.95`, `--gene hold=0.9`,
 `--gene entropy=0.1`, `--gene maturity=true`, `--gene code=64`, `--gene learned_code=64`,
@@ -340,6 +353,7 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --setpoints        # the servos' setpoints sensed too
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass  # pay the line of the birth heading, sensed by a compass
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass --ground  # and the velocity over the ground sensed too
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --layout leg      # a slot per leg: the brain chooses a leg's pair of commands at once
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
@@ -1544,6 +1558,96 @@ measure, with the course's backward pay beside it. The copies without entropy wa
 learning, 2.3–2.6 calm. The sense stays off: it is an option named in every reading, and no
 default has a dose yet.
 
+**The sizes and the rates.** The founder genes that the readings above had still not moved
+on this body: the module widths (`--gene modules=128,64`, 456 neurons and 42,681 parameters,
+and `32,16`, 264 and 14,025, against the founder's 64,32, 328 and 22,041), the sensory scale
+(`--gene sensory_scale=2` and `8` against the founder's 4) and the actor's rates together
+(`--gene eta=0.01 --gene eta_bias=0.001`, a third of the founder's 0.03 and 0.003). Servos,
+gamma 0.99, seeds 0–2, 30,000 moments; frozen newborns of the two widths and frozen copies at
+3000 moments:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (the founder; table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| modules 128,64 | +0.855 (+0.13; 4.2 → 4.4; 0.94; 0.029) | +1.824 (+0.08; 3.5 → 4.2; 0.95; 0.031) | +0.497 (+0.20; 3.8 → 3.4; 0.97; 0.025) |
+| modules 32,16 | +0.317 (0.00; 3.2 → 3.0; 0.00; 0.054) | −1.523 (−0.29; 4.7 → 5.0; 0.00; 0.052) | +0.218 (0.00; 5.3 → 6.0; 0.00; 0.042) |
+| sensory scale 2 | +1.310 (0.00; 3.7 → 4.5; 1.00; 0.022) | +0.657 (+0.24; 3.0 → 4.1; 0.89; 0.028) | +0.310 (−0.01; 3.2 → 3.0; 0.00; 0.062) |
+| sensory scale 8 | +1.088 (−0.08; 4.0 → 4.1; 0.97; 0.026) | +0.285 (−0.06; 3.4 → 4.4; 0.76; 0.036) | +0.806 (+0.05; 3.9 → 3.9; 0.88; 0.032) |
+| eta 0.01, eta bias 0.001 | +0.419 (+0.01; 4.2 → 5.0; 0.00; 0.067) | +0.350 (−0.01; 2.8 → 4.1; 0.90; 0.030) | +1.304 (+0.08; 4.1 → 4.3; 0.90; 0.031) |
+| frozen newborn, 3000 moments (128,64 / 32,16) | −0.050 / +0.018 | +0.107 / +0.007 | +0.002 / −0.031 |
+| frozen copies, 3000 moments (128,64 / 32,16 / scale 2 / scale 8 / eta 0.01) | 0.151 / 0.061 / 0.156 / 0.155 / 0.114 | 0.149 / 0.108 / 0.125 / 0.154 / 0.140 | 0.153 / 0.089 / 0.124 / 0.154 / 0.151 |
+| modules 128,64, per 5000 moments | +0.45 0.00 +0.08 +0.05 +0.13 +0.13 | +1.11 +0.26 +0.37 −0.08 +0.09 +0.08 | +0.19 +0.07 +0.01 +0.01 +0.02 +0.20 |
+| modules 32,16, per 5000 moments | +0.32 0.00 0.00 0.00 0.00 0.00 | +0.02 −0.32 −0.30 −0.30 −0.33 −0.29 | +0.22 0.00 0.00 0.00 0.00 0.00 |
+
+**Reading:** no size and no rate finds a gait, and the small brain brings the calm stall
+back on every seed. The 32,16 brain fell calm at 1000, 2700 and 1600 moments and never
+learned again: two seeds into the rock (0.00 a window, 0.042–0.054 a moment, five to six
+feet planted) and seed 1 into a sway that goes backward 0.3 m a window for 27,000 moments
+while earning 0.052 a moment, twice what the founder's aroused seeds earn going forward,
+the leak of "The leaking mark" in one row. The 128,64 brain stays aroused to the end on
+every seed (0.94–0.97) and walks the founder's distances, +0.86 / +1.82 / +0.50, its best
+window seed 1's first (+1.11) and 0.1 a window after, at 5.5–5.9 ms a moment with fifteen
+lives sharing the machine (the small brain 2.1); a wider cortex is more to sweep and nothing
+more to find. The sensory scale
+at 2 and 8 and the slow rates stay inside the founder's spread (+0.31 to +1.31), scale 2 and
+the slow rate each stalling one seed calm (seed 2 at 3500, seed 0 at 4000) into the rock the
+founder stalls into, the slow rate's seed 2 the one life of the batch that gained in every
+window (+0.46 +0.19 +0.27 +0.23 +0.08 +0.08, aroused 0.90 to the end, 4.1–4.3 feet
+planted). The copies walk the hip sweep at 0.11–0.16 except the small brain's, 0.06–0.11;
+the newborns −0.05 to +0.11. The founder stays at 64,32, scale 4 and 0.03: the size of the
+cortex and the speed of the actor are not where the walk is.
+
+**A slot per leg.** `--layout leg` ("The brain") composes the motor cortex as eight slots of
+nine, one per leg, each answer one of the nine pairs the leg's hip and knee commands can
+make, so that a leg is one choice to credit instead of two that must agree; the body reads
+the same sixteen commands. Servos, gamma 0.99, seeds 0–2, 30,000 moments, under the plain law,
+with the entropy term at 0.1, and in the row that went farthest above (the course at the
+birth heading, the compass, the ground sense, entropy 0.1); random and frozen newborns under
+the layout and frozen copies at 3000 moments; the joint layout's rows from the tables above
+for comparison:
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| a slot per joint (the founder; table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| a slot per leg | +0.267 (+0.04; 3.7 → 4.1; 0.90; 0.030) | +0.601 (0.00; 3.3 → 3.0; 0.00; 0.052) | +0.149 (0.00; 4.8 → 5.0; 0.00; 0.042) |
+| a slot per joint, entropy 0.1 (table above) | +0.564 (+0.01; 3.3 → 3.0; 0.00; 0.070) | +5.218 (+0.63; 3.1 → 4.6; 0.46; 0.053) | +4.263 (+0.69; 4.9 → 4.9; 0.00; 0.052) |
+| a slot per leg, entropy 0.1 | +0.351 (−0.02; 3.2 → 3.0; 0.00; 0.075) | +1.833 (0.00; 3.0 → 6.1; 0.00; 0.048) | +0.893 (−0.01; 4.2 → 4.0; 0.00; 0.058) |
+| random, a slot per leg, 3000 moments | +0.329 (3.1) | +0.594 (3.2) | +0.271 (3.1) |
+| frozen newborn, a slot per leg, 3000 moments | +0.099 (5.0) | −0.029 (2.0) | −0.070 (7.0) |
+| frozen copies, 3000 moments (plain / entropy) | 0.132 / 0.089 | 0.080 / 0.162 | 0.108 / 0.100 |
+| a slot per leg, per 5000 moments (plain / entropy) | +0.01 −0.09 +0.13 −0.15 +0.33 +0.04 / +0.21 +0.16 −0.02 +0.01 +0.01 −0.02 | +0.60 −0.01 0.00 0.00 −0.01 0.00 / +1.06 +0.73 +0.05 −0.01 0.00 0.00 | +0.15 0.00 0.00 0.00 0.00 0.00 / +0.76 +0.14 −0.01 0.00 +0.01 −0.01 |
+
+| 30,000 moments, metres along the course (forward metres; course metres in the last 5000; rad turned; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| a slot per joint: course 0, compass, ground, entropy 0.1 (table above) | +0.745 (+0.74; −0.34; 237; 3.5 → 4.0; 0.58; 0.047) | +7.942 (+6.49; +0.99; 203; 3.8 → 4.8; 0.39; 0.063) | +2.650 (+0.76; −0.08; 228; 3.5 → 6.0; 0.00; 0.048) |
+| a slot per leg: course 0, compass, ground, entropy 0.1 | +1.151 (+0.12; −0.06; 258; 3.8 → 5.0; 0.00; 0.061) | +2.705 (+1.97; +0.66; 231; 3.8 → 3.8; 0.24; 0.061) | +0.533 (−0.02; +0.08; 310; 3.0 → 3.0; 0.00; 0.047) |
+| frozen newborn, a slot per leg, compass and ground, 3000 moments, course metres | +0.070 | −0.033 | +0.006 |
+| frozen copies, 3000 moments, course metres | +0.124 | +0.125 | −0.141 |
+| a slot per leg, per 5000 moments, course / forward | +0.15 +0.31 +0.43 +0.23 +0.09 −0.06 / +0.29 +0.06 −0.22 −0.06 +0.10 −0.04 | +0.59 +0.11 +0.11 +0.30 +0.94 +0.66 / +0.58 −0.36 +0.04 +0.45 +0.62 +0.64 | +0.08 +0.08 +0.10 +0.08 +0.10 +0.08 / −0.01 −0.01 +0.02 −0.02 +0.02 −0.01 |
+
+**Reading:** a leg as one choice finds no gait and loses what the joints found. Under the
+plain law the leg layout walks +0.27 / +0.60 / +0.15 against the founder's +1.69 / +0.94 /
++0.67, and two seeds fall calm by 4800 moments (seed 1 into a three-footed sway at 0.052 a
+moment, seed 2 into the rock at 1400); seed 0 stays aroused (0.90) and no window of its life
+exceeds +0.33. With the entropy term, the one gene that walked the joints 4–5 m on two seeds,
+the leg layout walks +0.35 / +1.83 / +0.89 and every seed falls calm (5300, 12,300, 6600
+moments): seed 1 gained +1.06 and +0.73 in its first two windows and then stood on six feet
+(0.048 a moment) for 18,000 moments. In the row that walked the joints 7.9 m along a line,
+the legs go +1.15 / +2.71 / +0.53 along the course: seed 1 gained along the course in every
+window (+0.11 to +0.94), 1.97 m forward, and learned until 27,300 moments, longer than any
+other life of the layout, then fell calm; seed 0 fell
+calm at 18,900 and seed 2 at 900, into a sway that nets +0.08 a window along the course.
+Eight lives of nine are calm before the end, against four of nine under the joint layout
+in the same rows; a nine-way answer whose outcome credits one choice is, on this body, a
+policy that settles sooner, not one that finds the step. The random control under the
+layout walks the usual sway (+0.27 to +0.59 in 3000 moments; the distribution is the
+founder's, nine pairs at a ninth each as two joints at a third each), the newborns −0.07 to
++0.10, the copies the hip sweep at 0.08–0.16 (the course copy of seed 2 −0.14, turning). The
+founder keeps a slot per joint; the layout stays a birth option named in every reading, and
+no row of it is worth seeds 3–5 before the joint rows above are. 3.7–3.9 ms a moment for
+the two plain-law lives that ran with twelve others; the rest of the batch shared the
+machine with the previous batch's controls as well, and their costs are not a reading.
+
 What a next step would measure, each against the same controls and on the eight-legged body:
 the finer code with the stance term over a longer life, the one gene that moved the first
 block; the course with the compass, the ground sense and the entropy term at 0.1 on seeds
@@ -1557,6 +1661,10 @@ rhythm for 60,000 moments and is worth seeds 3–5 and a dose between 5 and 20; 
 term at 0.1 walked two seeds of three 4–5 m and one of them every block of 60,000 moments,
 in calm cycles the brain repeats to the bit (a jitter, a one-legged row on a circle), and is
 the one gene above worth seeds 3–5, a dose of 0.03 and 0.3, and the stance term alongside;
+the module widths, the sensory scale and the actor's rates are measured above and change
+nothing, the small cortex stalling every seed calm; a slot per leg, the one change to how
+the brain's answer meets the body, loses metres on every row and falls calm sooner, and
+stays a named option;
 the 34 m brain's world (contact model, support rule, leg stop) has
 changed under it since, so its continuation is no longer one life. What the
 crawl needs is a law that pays it more than

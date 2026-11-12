@@ -28,7 +28,8 @@ from typing import Any
 import numpy as np
 
 from .body import DEFAULT_MOTORS, DT, HEIGHT, HIPS, JOINTS, LEGS, MOTORS, Spider
-from .brain import FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, gene_words, genes_from_text, make_policy
+from .brain import (DEFAULT_LAYOUT, LAYOUTS, FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, gene_words,
+                    genes_from_text, make_policy)
 from .senses import DEFAULT as DEFAULT_SENSES, Senses
 
 PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full stroke speed of 0.2 m/s;
@@ -180,6 +181,7 @@ class Life:
         backward_pay: float = BACKWARD_PAY,
         old_ground: float = OLD_GROUND,
         course: float | bool | None = COURSE,
+        layout: str = DEFAULT_LAYOUT,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self._take_law(checked_law(stance_pay=stance_pay, yaw_pay=yaw_pay, window=window, high_water=high_water,
@@ -200,7 +202,12 @@ class Life:
         if senses.setpoints and self.motors != "target":
             raise ValueError("the setpoint senses need target motors (--motors target)")
         self.body = Spider(motors=self.motors)
-        self.policy = make_policy(policy, self.seed, brain_path, genes, backend, inputs=senses.inputs)
+        if layout not in LAYOUTS:
+            raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
+        self.layout = str(layout)               # how the brain's answer is read, a slot per joint or per leg; the
+                                                # brain's own, composed in: a saved brain keeps its layout
+        self.policy = make_policy(policy, self.seed, brain_path, genes, backend, inputs=senses.inputs, layout=self.layout)
+        self.layout = getattr(self.policy, "layout", self.layout)   # a loaded brain's layout is the life's
         self.reward: float | None = None        # the last executed command's outcome, not yet delivered
         self.moments = 0
         self.distance_forward = 0.0
@@ -451,18 +458,20 @@ class Life:
             current.owed = (current.owed or 0.0) + self.reward   # the brain's last outcome stays its
             self.reward = None
         if name == "brain":
-            self.policy = brain if brain is not None else make_policy("brain", self.seed, None, self.genes, self.backend, inputs=self.senses.inputs)
+            self.policy = brain if brain is not None else make_policy("brain", self.seed, None, self.genes, self.backend,
+                                                                     inputs=self.senses.inputs, layout=self.layout)
             self._brain = None
         elif name == "random":
             self._keep_brain(brain)
-            self.policy = RandomPolicy(self.seed + self.switches + 1)
+            self.policy = RandomPolicy(self.seed + self.switches + 1, self.layout)
         elif name == "frozen":
             self._keep_brain(brain)
             if brain is not None:
                 scratch = self.runs / "frozen-copy.npz"
                 self.policy = FrozenPolicy.copy_of(brain.brain, scratch, backend_of(self.backend).get("backend"))
             else:
-                self.policy = make_policy("frozen", self.seed, None, self.genes, self.backend, inputs=self.senses.inputs)
+                self.policy = make_policy("frozen", self.seed, None, self.genes, self.backend, inputs=self.senses.inputs,
+                                          layout=self.layout)
         else:
             raise ValueError(f"policy {name!r}: brain, random or frozen")
         self.switches += 1
@@ -511,6 +520,7 @@ class Life:
                 "cadence": CADENCE_VERSION,
                 "seed": self.seed,
                 "senses": self.senses.options(),
+                "layout": self.layout,
                 "genes": self.genes or {},
                 # under a control, the brain's last outcome already sits in its owed
                 "reward": self.reward if self.policy is brain else None,
@@ -562,6 +572,10 @@ class Life:
                         self.senses = saved_senses
             where = backend_of(self.backend)
             brain = fitted(SpiderBrain.load(self.brain_file, where.get("backend")), self.senses.inputs, self.brain_file)
+            if brain.layout != self.layout:
+                # the layout is composed into the brain: the saved life keeps its own
+                self.notes.append(f"saved with a slot per {brain.layout}, asked for a slot per {self.layout}: the saved life keeps its own")
+                self.layout = brain.layout
             self.policy = brain
             self._brain = None
             if state is not None:
@@ -612,14 +626,14 @@ class Life:
         continuing life, taken only on the page's Reset after the person confirmed it.
 
         ``birth`` names the newborn: ``seed``, ``genes`` (overrides, a dict or the nursery's
-        ``name=value`` words in one string), ``motors``, ``setpoints``, ``compass`` and ``ground``; what it
-        leaves out stays as the life had it. Genes are composed once, at birth, which is why
+        ``name=value`` words in one string), ``motors``, ``layout``, ``setpoints``, ``compass`` and
+        ``ground``; what it leaves out stays as the life had it. Genes are composed once, at birth, which is why
         they are set here and nowhere else. The law is the life's and stays as it is; under
         the course law the distance along the course and the mark start at zero."""
         birth = dict(birth or {})
-        unknown = sorted(set(birth) - {"seed", "genes", "motors", "setpoints", "compass", "ground"})
+        unknown = sorted(set(birth) - {"seed", "genes", "motors", "layout", "setpoints", "compass", "ground"})
         if unknown:
-            raise ValueError(f"a birth names seed, genes, motors, setpoints, compass and ground, not {', '.join(unknown)}")
+            raise ValueError(f"a birth names seed, genes, motors, layout, setpoints, compass and ground, not {', '.join(unknown)}")
         seed = int(birth.get("seed", self.seed))
         genes = birth.get("genes", self.genes)
         if isinstance(genes, str):
@@ -629,6 +643,9 @@ class Life:
         motors = str(birth.get("motors", self.motors))
         if motors not in MOTORS:
             raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
+        layout = str(birth.get("layout", self.layout))
+        if layout not in LAYOUTS:
+            raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
         setpoints = bool(birth.get("setpoints", self.senses.setpoints))
         compass = bool(birth.get("compass", self.senses.compass))
         ground = bool(birth.get("ground", self.senses.ground))
@@ -636,13 +653,13 @@ class Life:
             raise ValueError("the setpoint senses need target motors")
         senses = self.senses if (setpoints, compass, ground) == (self.senses.setpoints, self.senses.compass, self.senses.ground) \
             else Senses(per=self.senses.per, setpoints=setpoints, compass=compass, ground=ground)
-        newborn = make_policy("brain", seed, None, genes, self.backend, inputs=senses.inputs)   # composed before the old life ends
+        newborn = make_policy("brain", seed, None, genes, self.backend, inputs=senses.inputs, layout=layout)   # composed before the old life ends
         with self.lock:
             was = self.moments
             for path in (self.brain_file, self.sidecar, self.runs / "frozen-copy.npz"):
                 if path.exists():
                     path.unlink()
-            self.seed, self.genes, self.motors, self.senses = seed, genes, motors, senses
+            self.seed, self.genes, self.motors, self.senses, self.layout = seed, genes, motors, senses, layout
             self.policy = newborn
             self._brain = None
             self.body = Spider(motors=self.motors)
@@ -662,13 +679,14 @@ class Life:
             self._last_save = time.monotonic()
             self.last_save_at = None
             self.loaded_from = None
-            born = f"seed {self.seed}, {self.motors} motors" + (", setpoints sensed" if setpoints else "") \
+            born = f"seed {self.seed}, {self.motors} motors" + (", a slot per leg" if layout == "leg" else "") \
+                + (", setpoints sensed" if setpoints else "") \
                 + (", a compass" if compass else "") + (", the ground sense" if ground else "") \
                 + (f", genes {gene_words(genes)}" if genes else ", founder genes")
             self.notes = [f"reset after {was} moments: a newborn brain of {born}"]
             self.latest = self.snapshot(None)
         return {"reset": True, "moments_before": was, "seed": self.seed, "genes": genes or {}, "motors": self.motors,
-                "setpoints": setpoints, "compass": compass, "ground": ground}
+                "layout": self.layout, "setpoints": setpoints, "compass": compass, "ground": ground}
 
     def _maybe_autosave(self) -> None:
         if self.autosave_minutes <= 0 or not isinstance(self.policy, SpiderBrain):
@@ -684,6 +702,7 @@ class Life:
             "pace": self.pace,
             "dt": DT,
             "motors": self.motors,
+            "layout": self.layout,
             "inputs": self.senses.inputs,
             "setpoints": self.senses.setpoints,
             "compass": self.senses.compass,

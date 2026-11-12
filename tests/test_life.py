@@ -556,3 +556,36 @@ def test_the_ground_sense_is_a_birth_option_saved_with_the_life(tmp_path):
     born = life.control("reset", {"ground": True, "compass": False})
     assert life.senses.options() == {"per": 8, "setpoints": False, "compass": False, "ground": True}
     assert "the ground sense" in life.notes[0] and life.policy.brain.inputs == 8 * 20 + 8
+
+
+def test_a_slot_per_leg_is_a_birth_option_saved_with_the_life(tmp_path):
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", layout="leg")
+    assert life.describe()["layout"] == "leg" and life.policy.layout == "leg" and len(life.policy.brain.motor_index) == 72
+    for _ in range(5):
+        out = life.tick()
+        assert len(out["commands"]) == 16 and all(c in (0, 1, 2) for c in out["commands"])
+    life.save()
+    assert json.loads(life.sidecar.read_text())["layout"] == "leg"
+    again = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")    # a slot per joint asked for
+    assert again.load()["custody"] == "kept"
+    assert again.layout == "leg" and again.policy.layout == "leg"
+    assert any("a slot per leg" in note for note in again.notes)
+    for _ in range(3):
+        assert life.tick()["pose"] == again.tick()["pose"]
+    # the controls take the life's layout
+    life.switch("random")
+    assert life.policy.layout == "leg" and len(life.tick()["commands"]) == 16
+    life.switch("frozen")
+    assert life.policy.layout == "leg" and len(life.tick()["commands"]) == 16
+    life.switch("brain")
+    # a birth names it; what it leaves out stays
+    born = life.control("reset", {"layout": "joint"})
+    assert born["layout"] == "joint" and life.layout == "joint" and len(life.policy.brain.motor_index) == 48
+    assert "slot per leg" not in life.notes[0]
+    born = life.control("reset", {"layout": "leg", "compass": True})
+    assert born["layout"] == "leg" and life.layout == "leg" and len(life.policy.brain.motor_index) == 72
+    assert "a slot per leg" in life.notes[0] and "a compass" in life.notes[0]
+    with pytest.raises(ValueError):
+        life.control("reset", {"layout": "wheel"})
+    with pytest.raises(ValueError):
+        Life("brain", seed=0, pace=0.0, runs=tmp_path / "x", backend="cpu", layout="wheel")

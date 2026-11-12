@@ -215,7 +215,7 @@ fetch('/api/describe').then(r => r.json()).then(d => {
 function describedBy(d) {
   described = d;
   if (lastState) $('law').textContent = law(lastState);
-  $('motors').textContent = (d.motors || 'rate') + (d.setpoints ? ', setpoints sensed' : '') + (d.compass ? ', a compass' : '') + (d.ground ? ', the ground sense' : '');
+  $('motors').textContent = (d.motors || 'rate') + (d.layout === 'leg' ? ', a slot per leg' : '') + (d.setpoints ? ', setpoints sensed' : '') + (d.compass ? ', a compass' : '') + (d.ground ? ', the ground sense' : '');
   const r = d.reward || {};
   for (const k of LAW_KEYS) {
     const field = $('law-' + k);
@@ -223,6 +223,7 @@ function describedBy(d) {
   }
   $('birth-seed').value = d.seed;
   $('birth-motors').value = d.motors || 'target';
+  $('birth-layout').value = d.layout || 'joint';
   $('birth-setpoints').checked = !!d.setpoints;
   $('birth-compass').checked = !!d.compass;
   $('birth-ground').checked = !!d.ground;
@@ -425,12 +426,12 @@ function birth() {
   if ($('birth-maturity').checked) words.push('maturity=true');
   if (Number($('birth-code').value) > 0) words.push('code=' + Math.round(Number($('birth-code').value)));
   if (Number($('birth-learned-code').value) > 0) words.push('learned_code=' + Math.round(Number($('birth-learned-code').value)));
-  return { seed: Number($('birth-seed').value), motors: $('birth-motors').value,
+  return { seed: Number($('birth-seed').value), motors: $('birth-motors').value, layout: $('birth-layout').value,
            setpoints: $('birth-setpoints').checked, compass: $('birth-compass').checked, ground: $('birth-ground').checked,
            genes: words.filter(Boolean).join(' ') };
 }
 function resetQuestion(b) {
-  return 'Reset everything?\n\nA newborn brain replaces the live one: seed ' + b.seed + ', ' + b.motors + ' motors'
+  return 'Reset everything?\n\nA newborn brain replaces the live one: seed ' + b.seed + ', ' + b.motors + ' motors' + (b.layout === 'leg' ? ', a slot per leg' : '')
     + (b.setpoints ? ', setpoints sensed' : '') + (b.compass ? ', a compass' : '') + (b.ground ? ', the ground sense' : '') + ', ' + (b.genes ? 'genes ' + b.genes : 'founder genes') + '.\n'
     + 'The world returns to the origin, every counter goes to zero and the saved life in runs/ is deleted.\n\n'
     + 'The brain that has lived until now is gone for good.';

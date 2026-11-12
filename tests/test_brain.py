@@ -259,3 +259,45 @@ def test_the_observation_codes_are_genes(tmp_path):
     assert again.policy.refusals == 0
     payload = again.spider()                                   # the brain view names the code region
     assert "code" in payload["classes"] and payload["labels"]["code"] == "code"
+
+
+def test_a_slot_per_leg_reads_the_same_sixteen_commands(tmp_path):
+    from spider.brain import LAYOUTS, joint_commands, layout_of, slots_of
+
+    assert LAYOUTS == ("joint", "leg") and slots_of("joint") == SLOTS and slots_of("leg") == [9] * 8
+    with pytest.raises(ValueError):
+        slots_of("wheel")
+    # a leg's choice of nine is the pair of its hip's and its knee's three
+    assert joint_commands(list(range(9)) + [4] * 7, "leg") == [0, 0, 0, 1, 0, 2, 1, 0, 1, 1, 1, 2, 2, 0, 2, 1, 2, 2] + [1, 1] * 7
+    assert joint_commands([2] * 16, "joint") == [2] * 16
+    pairs = {tuple(joint_commands([c] + [4] * 7, "leg")[:2]) for c in range(9)}
+    assert pairs == {(h, k) for h in range(3) for k in range(3)}        # every pair a leg can take, once
+    brain = compose(0, layout="leg", backend="cpu")
+    assert len(brain.motor_index) == 72 and layout_of(brain) == "leg" and layout_of(compose(0, backend="cpu")) == "joint"
+    life = SpiderBrain(brain)
+    assert life.layout == "leg" and life.describe()["layout"] == "leg"
+    spider = Spider()
+    reward = None
+    for _ in range(5):
+        out = life.moment(observe(spider), reward)
+        assert not out["refused"] and len(out["commands"]) == JOINTS and all(c in (0, 1, 2) for c in out["commands"])
+        assert len(out["answer"]) == 8 and all(0 <= a < 9 for a in out["answer"])
+        assert out["commands"] == joint_commands(out["answer"], "leg")
+        assert len(out["activity"]["motor"]) == 72
+        spider.step(out["commands"])
+        reward = 0.1
+    # the controls under the layout: random draws a leg's nine, a frozen copy keeps the brain's layout
+    rnd = RandomPolicy(3, "leg")
+    out = rnd.moment(None, None)
+    assert len(out["answer"]) == 8 and out["commands"] == joint_commands(out["answer"], "leg") and rnd.describe()["layout"] == "leg"
+    frozen = FrozenPolicy.copy_of(brain, tmp_path / "copy.npz", "cpu")
+    assert frozen.layout == "leg" and len(frozen.moment(observe(spider), None)["commands"]) == JOINTS
+    assert make_policy("brain", 0, None, None, "cpu", layout="leg").layout == "leg"
+    assert make_policy("frozen", 0, None, None, "cpu", layout="leg").layout == "leg"
+    assert make_policy("random", 0, layout="leg").layout == "leg"
+    # a saved leg brain loads as one, whatever the layout asked for
+    path = brain.save(tmp_path / "leg.npz")
+    assert make_policy("brain", 0, path, None, "cpu", layout="joint").layout == "leg"
+    # the view lays the 72 motor neurons out as eight rings
+    payload = life.connectome()
+    assert payload["counts"]["classes"]["motor"] == 72

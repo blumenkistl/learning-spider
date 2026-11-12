@@ -22,7 +22,11 @@ without a page, for measurement.
   birth" names (the life's own when it names nothing); nothing else recreates a brain, and
   genes are set at birth only.
 - **No controller between brain and motors.** Each motor slot is one joint's
-  `decrease / hold / increase`. There is no gait generator, oscillator, inverse kinematics or
+  `decrease / hold / increase`, or, under the leg layout (`--layout leg`, `LAYOUT`; a birth
+  option composed into the brain, `joint` the founder), one leg's pair of them, nine answers
+  that reach the same sixteen commands: a leg is then one choice to credit, not two. The
+  layout is the brain's, saved and loaded with it, and named in every reading made under it
+  (the README's "A slot per leg"). There is no gait generator, oscillator, inverse kinematics or
   smoothing between the brain's answer and the joints. Adding one makes a different model;
   label it as a control. The body's own stops (the hip and knee ranges, the stop that keeps a
   side's neighbouring legs from crossing) are the world's, not a controller: they bound what

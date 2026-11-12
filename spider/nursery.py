@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from .body import DEFAULT_MOTORS, MOTORS
+from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
 from .life import (BACKWARD_PAY, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
                    Life, checked_course)
@@ -44,7 +45,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
                 yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water, old_ground=args.old_ground,
                 pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay,
-                course=args.course)
+                course=args.course, layout=args.layout)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -105,6 +106,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         **life.law(),                       # a continued life's own law, whatever the flags said
         "law_changes": life.law_changes,
         "motors": life.motors,
+        "layout": life.layout,
         "per": life.senses.per,
         "setpoints": life.senses.setpoints,
         "compass": life.senses.compass,
@@ -150,6 +152,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=BACKWARD_PAY,
                         help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
+    parser.add_argument("--layout", choices=LAYOUTS, default=DEFAULT_LAYOUT,
+                        help=f"how a newborn brain's answer is read: a slot per joint (three answers) or per leg "
+                             f"(nine, the pairs of its two joints' answers); a saved brain keeps its own (default {DEFAULT_LAYOUT})")
     parser.add_argument("--motors", choices=MOTORS, default=DEFAULT_MOTORS,
                         help=f"the body's motor model: rate (the founder until 2026-11-12, a command moves the joint for one "
                              f"moment) or target, position servos (default {DEFAULT_MOTORS})")
