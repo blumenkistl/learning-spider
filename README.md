@@ -129,7 +129,14 @@ relaxes toward the negated rigid two-dimensional fit (translation and yaw) of th
 motion. Standing on one side's feet alone, or on fewer than three, the body is down: its
 velocity decays and nothing pushes it. (Until 2026-11-12 any two planted feet carried it,
 so a body on two left feet stood and pushed; "The support rule" below has the readings of
-the change.)
+the change.) Neighbouring legs of a side cannot cross: once the leg behind has turned 0.2 rad
+further forward than the leg in front of it, the two stop against each other, each hip
+pushed back half the excess (`separate` in `spider/body.py`; `LEG_CONVERGE`). At that
+angle the two legs' lines meet 0.40 m from the hips and a foot reaches at most 0.35 m, so
+the stop sits where the legs would touch, with the lifted and the planted leg bound alike.
+The split keeps both hips in their range (two legs converging past the stop have a mean
+swing inside ±0.4, and the split puts them 0.2 either side of it); a few passes settle a side. (Until 2026-11-12 the hips were independent and the legs turned
+through each other; "The separated legs" below has the readings of the change.)
 
 The first world had the foot planted only at knee exactly 0 and needed three feet. Over 3000
 moments the brain and the random policy both averaged under two planted feet and moved nothing
@@ -138,7 +145,7 @@ appeared. The pressing range and the two-foot minimum were the smallest change t
 reward reachable; they were chosen by that probe, not by a physical argument. The minimum is
 three feet across both sides again since 2026-11-12, this time by the physical argument that
 one side's feet cannot hold a body up, with the pressing range keeping it reachable. Beyond a radius of 5 m the body is recentred, which is a change of place, not a
-new life. No pitch or roll, no leg collisions, no friction model: the contact rule is a model
+new life. No pitch or roll, no leg thickness beyond the stop, no friction model: the contact rule is a model
 chosen so that sliding and swinging do not pay and a gait does.
 
 ### The senses (`spider/senses.py`)
@@ -610,10 +617,41 @@ The other five brains are where they were: 0.1–0.4 m, fully aroused, no trend.
 Whether the gait is the support rule's or seed 2's luck, three seeds cannot say; the rule is
 the physical one and ships. 4 ms a moment aroused.
 
+**The separated legs.** Until 2026-11-12 the hips were independent and neighbouring legs of a
+side turned through each other: both hips at their limits put the leg behind 0.4 rad past
+the leg in front, their lines meeting 0.2 m out, well inside a foot's reach. The 24.9 m gait
+above walked that way: its frozen copy replayed on the old body has the legs crossed in
+2995 of 3000 moments. Now neighbouring legs stop against each other at 0.2 rad of
+convergence, where their lines meet 0.40 m out and no foot reaches (`separate` in
+`spider/body.py`, `LEG_CONVERGE`; the test `test_neighbouring_legs_stop_against_each_other`).
+Fresh brains, held foot, supported, 30,000 moments, the same seeds; the rows marked
+"crossing" are the ones from "The support rule":
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| brain, progress only, crossing (table above) | +0.316 (−0.05; 4.5 → 3.9; 1.00; 0.024) | +0.167 (+0.05; 2.6 → 3.2; 1.00; 0.021) | +0.380 (0.00; 3.4 → 3.5; 1.00; 0.021) |
+| brain, progress only, separated | +0.211 (−0.10; 3.7 → 3.2; 0.99; 0.018) | +0.286 (+0.05; 2.5 → 3.1; 1.00; 0.019) | +0.078 (−0.08; 3.5 → 4.4; 1.00; 0.020) |
+| brain, stance 0.1, crossing (table above) | +0.092 (−0.01; 4.0 → 4.6; 1.00; 0.021) | +0.222 (−0.01; 3.1 → 4.9; 1.00; 0.017) | **+24.942** (+4.49; 4.9 → 4.9; 0.00; 0.044) |
+| brain, stance 0.1, separated | +0.202 (+0.08; 4.1 → 4.4; 1.00; 0.009) | +0.200 (0.00; 2.7 → 5.0; 1.00; 0.018) | +0.290 (+0.03; 4.4 → 5.3; 1.00; 0.018) |
+| random, separated | +0.894 (+0.42; 2.8 → 2.8; 0.039) | +0.064 (+0.43; 3.2 → 3.4; 0.055) | +0.413 (−0.29; 3.0 → 3.1; 0.042) |
+| frozen newborn, separated, 3000 moments | +0.012 (4.0) | +0.011 (2.0) | −0.194 (6.8) |
+| frozen copy of the progress-only brain, 3000 moments | +0.158 (6.0) | +0.152 (4.0) | +0.152 (5.0) |
+| frozen copy of the stance brain, 3000 moments | +0.158 (6.0) | +0.149 (6.0) | +0.151 (7.0) |
+| frozen copy of the 24.9 m crossing brain on the separated body, 3000 moments | | | +0.088 (6.0) |
+
+**Reading:** the gait was a crossed-leg gait and the stop takes it away: the 24.9 m brain's
+copy on the separated body makes 0.09 m in its first hundred moments and then stands on six
+feet, and seed 2 under the stance term, raised on the separated body, is where the other
+seeds are, 0.29 m, fully aroused, its planted feet climbing from 4.4 to 5.3 without a step.
+The six learners sit at 0.1–0.3 m, the random policy at 0.06–0.9 m, which is the sway
+of a leg sweep and not a direction (its last 5000 go either way), and every frozen copy
+makes its one hip sweep and stands. Random earns 0.04–0.055 a moment, as on the crossing
+body. Nothing walks on this body yet; the stop is the physical rule and ships, and the walk
+has to be found again under it. 4 ms a moment.
+
 What a next step would measure, each against the same controls and on the eight-legged body:
-more seeds under the stance term on the supported body, to tell a found gait from one seed's
-luck; a continuation of the 24.9 m brain at a raised need (`--gene arousal.need=0.1`), to see
-whether a calm walker speeds up; a longer life under the high-water mark, the law under which
+more seeds under the stance term on the separated body, to find a gait the stop allows and
+tell it from one seed's luck; a longer life under the high-water mark, the law under which
 the brain stays aroused without an income it did not earn, and the same under window 20
 progress only; a continuation of the 34 m brain;
 a course hint on the net heading drift over a window rather than the unsigned turn; a lower
@@ -630,7 +668,8 @@ reproduce them with the same seeds.
 
 ## Limits
 
-- The contact rule is a model: no pitch or roll, no body mass, no leg collisions, no slipping
+- The contact rule is a model: no pitch or roll, no body mass, no leg thickness beyond the
+  stop that keeps a side's legs from crossing, no slipping
   except the decay while the body is down (fewer than three feet planted, or none on one
   side). A down body does not fall: its lifted legs stay where they are and it stands again
   the moment its feet support it. A gait that moves this body may not move a physical one.

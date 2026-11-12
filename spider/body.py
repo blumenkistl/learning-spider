@@ -10,7 +10,8 @@ pressing leg touches the ground where its tibia crosses it). Propulsion is the n
 two-dimensional fit (translation and yaw) of every foot that was planted both at the previous
 moment and at this one, when those feet support the body: at least one on each side and three
 in all (``supported``). Standing on one side's feet alone, the body is down and nothing pushes
-it. A foot that is lifted pushes nothing;
+it. Neighbouring legs of a side cannot cross: a hip that would turn its leg into the one in
+front or behind stops against it (``separate``). A foot that is lifted pushes nothing;
 a planted foot that does not move anchors the body; a closed joint cycle with the same planted
 set integrates to zero displacement. Moving forward therefore needs lifting, swinging and
 re-planting legs in a pattern: a gait, which is the brain's to find.
@@ -47,6 +48,10 @@ TIBIA_REST = math.acos((HEIGHT + FEMUR * math.sin(FEMUR_RISE)) / TIBIA)   # foot
 
 HIP_RANGE = (-0.6, 0.6)                 # swing about the leg's resting yaw, + forward
 KNEE_RANGE = (-0.5, 1.0)                # lift: 0 foot on the ground, below 0 the leg presses on it (foot held)
+LEG_CONVERGE = 0.2                      # rad: how far past parallel two neighbouring legs of a side may turn
+                                        # toward each other; at 0.2 their lines meet 0.40 m out, beyond the
+                                        # 0.35 m a foot reaches, so legs stop against each other, never cross
+                                        # (2026-11-12; before it they turned through each other)
 HIP_RATE = 1.5                          # rad/s per commanded step
 KNEE_RATE = 2.5
 
@@ -59,6 +64,29 @@ SLIDE = 6.0                             # 1/s: velocity decay while the body is 
 ARENA_RADIUS = 5.0                      # beyond this the spider is recentred (not a reset)
 
 SIDE = np.array([1.0] * PER_SIDE + [-1.0] * PER_SIDE)   # +1 left, -1 right
+
+
+def separate(joints: np.ndarray) -> np.ndarray:
+    """The hips with neighbouring legs of a side kept from crossing: wherever the leg behind
+    has turned more than ``LEG_CONVERGE`` further forward than the leg in front, both are
+    pushed back to that stop, halfway each, as two legs pressing on each other would be. The
+    split keeps both hips in range: two legs that converge past the stop have a mean swing
+    inside ±0.4, and the split puts them 0.2 either side of it. A few passes settle a side."""
+    joints = joints.copy()
+    for _ in range(8):
+        moved = False
+        for side in range(0, LEGS, PER_SIDE):
+            for i in range(side, side + PER_SIDE - 1):
+                front = SPLAY[i] + joints[i, 0]
+                behind = SPLAY[i + 1] + joints[i + 1, 0]
+                over = behind - front - LEG_CONVERGE
+                if over > 1e-12:
+                    joints[i, 0] += over / 2
+                    joints[i + 1, 0] -= over / 2
+                    moved = True
+        if not moved:
+            break
+    return joints
 
 
 def supported(planted) -> bool:
@@ -148,7 +176,7 @@ class Spider:
         cmd = np.asarray(commands, dtype=float).reshape(LEGS, 2) - 1.0
         if not np.all(np.isin(cmd, (-1.0, 0.0, 1.0))):
             raise ValueError("commands must be 0, 1 or 2 per joint")
-        self.joints = np.clip(self.joints + cmd * RATES * DT, LOW, HIGH)
+        self.joints = separate(np.clip(self.joints + cmd * RATES * DT, LOW, HIGH))
 
         _, foot = kinematics(self.joints)
         planted = HEIGHT + foot[:, 2] <= CONTACT_Z

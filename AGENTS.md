@@ -22,7 +22,9 @@ without a page, for measurement.
 - **No controller between brain and motors.** Each motor slot is one joint's
   `decrease / hold / increase`. There is no gait generator, oscillator, inverse kinematics or
   smoothing between the brain's answer and the joints. Adding one makes a different model;
-  label it as a control.
+  label it as a control. The body's own stops (the hip and knee ranges, the stop that keeps a
+  side's neighbouring legs from crossing) are the world's, not a controller: they bound what
+  the brain's answer can do, they never choose it.
 - **The world supplies problems, never answers.** The reward is the body's forward progress
   along its own heading, capped. No target pose, no phase, no "move leg 3 now". Shaping terms
   (lateral drift, yaw, posture) are not added without a measured reason and a README note.

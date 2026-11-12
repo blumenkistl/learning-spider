@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from spider.body import (
-    supported,
+    HIPS, LEG_CONVERGE, SPLAY, separate, supported,
     ARENA_RADIUS, CONTACT_Z, HEIGHT, HIP_RANGE, JOINTS, KNEE_RANGE, LEGS, Spider, kinematics,
 )
 
@@ -100,6 +100,58 @@ def test_one_side_cannot_hold_the_body_up():
     for _ in range(6):
         spider.step(cmd)
     assert spider.x > 0.01 and spider.heading < 0   # the left stroke turns it too
+
+
+def legs_cross(spider, i, j):
+    """Whether the hip-to-foot lines of legs i and j cross in the ground plane."""
+    _, foot = spider.feet()
+    p, r = HIPS[i, :2], foot[i, :2] - HIPS[i, :2]
+    q, u = HIPS[j, :2], foot[j, :2] - HIPS[j, :2]
+    den = r[0] * u[1] - r[1] * u[0]
+    if abs(den) < 1e-12:
+        return False
+    t = ((q[0] - p[0]) * u[1] - (q[1] - p[1]) * u[0]) / den
+    w = ((q[0] - p[0]) * r[1] - (q[1] - p[1]) * r[0]) / den
+    return 0.0 <= t <= 1.0 and 0.0 <= w <= 1.0
+
+
+def test_neighbouring_legs_stop_against_each_other():
+    """Leg 1 swings forward and leg 0 back as far as they can: they meet at the stop, never cross."""
+    spider = Spider()
+    cmd = hold()
+    cmd[0] = 0                             # leg 0's hip back
+    cmd[2] = 2                             # leg 1's hip forward
+    for _ in range(30):
+        spider.step(cmd)
+        yaw = SPLAY + spider.joints[:, 0]
+        assert yaw[1] - yaw[0] <= LEG_CONVERGE + 1e-9
+        assert not legs_cross(spider, 0, 1)
+    assert yaw[1] - yaw[0] == pytest.approx(LEG_CONVERGE)
+    assert spider.joints[0, 0] > HIP_RANGE[0] and spider.joints[1, 0] < HIP_RANGE[1]   # neither reached its range
+
+    # the stop is a stop, not a wall: the leg behind may turn forward until it meets the one in front
+    spider = Spider()
+    cmd = hold()
+    cmd[2] = 2
+    for _ in range(30):
+        spider.step(cmd)
+    assert spider.joints[1, 0] == pytest.approx(HIP_RANGE[1])   # from rest, leg 1 reaches its full swing
+    assert not legs_cross(spider, 0, 1) and not legs_cross(spider, 1, 2)
+
+    # without the stop, the same commands cross the legs
+    crossed = Spider()
+    crossed.joints[0, 0], crossed.joints[1, 0] = HIP_RANGE[0], HIP_RANGE[1]
+    assert legs_cross(crossed, 0, 1)
+    assert not legs_cross(Spider(joints=separate(crossed.joints)), 0, 1)
+
+    # a whole side pressed together settles in order, every leg in range
+    j = np.zeros((LEGS, 2))
+    j[:4, 0] = [HIP_RANGE[0], HIP_RANGE[1], HIP_RANGE[1], HIP_RANGE[1]]
+    out = separate(j)
+    yaw = SPLAY + out[:, 0]
+    assert np.all(np.diff(yaw[:4]) <= LEG_CONVERGE + 1e-9)
+    assert np.all(out[:, 0] >= HIP_RANGE[0] - 1e-9) and np.all(out[:, 0] <= HIP_RANGE[1] + 1e-9)
+    assert np.array_equal(out[4:], j[4:])                     # the other side is untouched
 
 
 def test_lifted_legs_push_nothing():
