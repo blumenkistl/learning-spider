@@ -34,7 +34,9 @@ brain can be fully aroused and still walk no better. Random and frozen never lea
 bar says so.
 
 Buttons: pause and resume; recentre (the body returns to the origin, nothing else changes);
-save and load (`runs/spider.npz` and its sidecar `runs/spider.json`); the policy that commands
+save and load (`runs/spider.npz` and its sidecar `runs/spider.json`); reset, which asks for
+confirmation and then ends the life: a newborn brain of the same seed takes the body, the world
+returns to the origin, every counter is zero and the saved life is deleted; the policy that commands
 the body, `brain`, `random` or a `frozen copy` of the live brain; the pace, 1× (20 moments a
 second, the body's own clock), 2×, 5× or as fast as the machine goes.
 

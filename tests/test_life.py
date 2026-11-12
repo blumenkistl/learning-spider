@@ -237,3 +237,23 @@ def test_save_carries_the_progress_window(tmp_path):
     assert list(again._progress) == list(life._progress)
     for _ in range(6):
         assert life.tick()["reward"] == again.tick()["reward"]
+
+
+def test_reset_starts_a_new_life_and_removes_the_save(tmp_path):
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    for _ in range(BLOCK + 5):
+        life.tick()
+    old = life.policy
+    assert life.control("save")["saved"] and life.brain_file.exists() and life.sidecar.exists()
+    assert life.control("policy", "random")["changed"]
+    life.spider.x = 1.0
+    r = life.control("reset")
+    assert r["ok"] and r["reset"] and r["moments_before"] == BLOCK + 5
+    assert isinstance(life.policy, SpiderBrain) and life.policy is not old and life.policy.moments == 0
+    assert life.moments == 0 and life.distance_forward == 0.0 and life.spider.x == 0.0
+    assert life.reward is None and not life.blocks and life.last_save_at is None
+    assert not life.brain_file.exists() and not life.sidecar.exists()
+    assert life.latest["moments"] == 0 and life.latest["policy"] == "brain"
+    assert life.control("load")["loaded"] is False            # nothing left to continue
+    life.tick()
+    assert life.moments == 1

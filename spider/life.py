@@ -252,6 +252,8 @@ class Life:
                 return {"ok": True, **self.save()}
             elif op == "load":
                 return {"ok": True, **self.load()}
+            elif op == "reset":
+                return {"ok": True, **self.reset()}
             elif op == "policy":
                 return {"ok": True, **self.switch(str(value))}
             elif op == "pace":
@@ -382,6 +384,37 @@ class Life:
             self.loaded_from = str(self.brain_file)
             self.latest = self.snapshot(None)
         return {"loaded": True, "path": str(self.brain_file), "moments": self.moments, "custody": custody}
+
+    def reset(self) -> dict[str, Any]:
+        """A new life in the same body: a newborn brain of the same seed and genes commands
+        it, the world stands at its origin, every counter is zero and the saved life is
+        deleted so a restart does not continue the old one. The old brain is gone. This is
+        the one deliberate end of a continuing life, taken only on the page's Reset after
+        the person confirmed it."""
+        with self.lock:
+            was = self.moments
+            for path in (self.brain_file, self.sidecar, self.runs / "frozen-copy.npz"):
+                if path.exists():
+                    path.unlink()
+            self.policy = make_policy("brain", self.seed, None, self.genes, self.backend)
+            self._brain = None
+            self.spider = Spider()
+            self.reward = None
+            self.moments = 0
+            self.distance_forward = 0.0
+            self.turned = 0.0
+            self.distance_net_start = (0.0, 0.0)
+            self.recentres = 0
+            self.switches = 0
+            self.blocks.clear()
+            self._block = []
+            self._progress.clear()
+            self._last_save = time.monotonic()
+            self.last_save_at = None
+            self.loaded_from = None
+            self.notes = [f"reset after {was} moments: a newborn brain of seed {self.seed}"]
+            self.latest = self.snapshot(None)
+        return {"reset": True, "moments_before": was, "seed": self.seed}
 
     def _maybe_autosave(self) -> None:
         if self.autosave_minutes <= 0 or not isinstance(self.policy, SpiderBrain):

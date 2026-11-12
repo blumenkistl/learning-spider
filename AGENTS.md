@@ -16,7 +16,9 @@ without a page, for measurement.
 
 - **One continuing brain.** The brain is composed once (`Brain.compose(..., arousal=...)`) and
   lives through `brain.live`. It is never recreated per moment, per episode or per page load.
-  A saved life is continued, with its world and its pending outcome, not replayed.
+  A saved life is continued, with its world and its pending outcome, not replayed. The page's
+  Reset is the one deliberate end of a life: after confirmation it deletes the save and a
+  newborn brain of the same seed takes the body; nothing else recreates a brain.
 - **No controller between brain and motors.** Each motor slot is one joint's
   `decrease / hold / increase`. There is no gait generator, oscillator, inverse kinematics or
   smoothing between the brain's answer and the joints. Adding one makes a different model;

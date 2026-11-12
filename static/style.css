@@ -13,12 +13,13 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); 
 .buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 button { background: #1b2230; color: var(--ink); border: 1px solid #2d3647; border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 button:hover { border-color: var(--accent); }
+button.danger { border-color: #5a2a2a; color: #ff9b9b; } button.danger:hover { border-color: #ff6b6b; }
 button.on { background: #203a4a; border-color: var(--accent); }
 #learning { margin-top: 10px; }
 #learning .scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); }
 #learning .scale .v { color: var(--ink); }
 #learning .bar { position: relative; height: 10px; margin-top: 3px; border: 1px solid #2d3647; border-radius: 5px; overflow: hidden; background: linear-gradient(90deg, #ff6b6b, #ffb454 50%, #7ee787); }
-#learning-cover { position: absolute; top: 0; right: 0; bottom: 0; width: 100%; background: #1b2230; transition: width .4s; }
+#learning-cover { position: absolute; top: 0; right: 0; bottom: 0; width: 100%; background: #1b2230; }
 #learning .small { margin-top: 3px; }
 #brain { display: block; width: 320px; height: 96px; margin-top: 6px; background: #0a0d12; border-radius: 6px; }
 #mode.aroused { color: #ffb454; } #mode.routine { color: #7ee787; } #mode.refused { color: #ff6b6b; }

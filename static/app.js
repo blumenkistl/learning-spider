@@ -311,7 +311,11 @@ function heat(v) {
 }
 
 // --- controls and the socket ---------------------------------------------------------------
+const RESET_QUESTION = 'Reset everything?\n\nA newborn brain of the same seed replaces the live one, '
+  + 'the world returns to the origin, every counter goes to zero and the saved life in runs/ is deleted.\n\n'
+  + 'The brain that has lived until now is gone for good.';
 document.querySelectorAll('button[data-op]').forEach(b => b.addEventListener('click', async () => {
+  if (b.dataset.op === 'reset' && !window.confirm(RESET_QUESTION)) return;
   const body = { op: b.dataset.op };
   if (b.dataset.value !== undefined) body.value = isNaN(b.dataset.value) ? b.dataset.value : Number(b.dataset.value);
   const r = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
