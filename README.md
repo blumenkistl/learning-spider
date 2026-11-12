@@ -24,8 +24,14 @@ python3 -m venv .venv
 Open http://127.0.0.1:8080. Drag to turn the world horizontally, use the wheel to zoom. The
 panel shows the moment, the brain's mode (aroused or routine), forward distance, the reward
 just earned, arousal level and want, the sweeps of the last settle, milliseconds per moment,
-and a strip of the brain's settled state: sensory inputs, association units, and for each of
-the sixteen joints its three motor units with the chosen command outlined.
+a learning bar, and a strip of the brain's settled state: sensory inputs, association units,
+and for each of the sixteen joints its three motor units with the chosen command outlined.
+
+The learning bar runs from "Brain Stall" (0) to "Learning" (100). It is the share of the last
+1000 moments the brain spent aroused, which under the arousal law is exactly when it learns;
+a calm brain answers greedily and changes nothing. It reads the arousal law, not the gait: a
+brain can be fully aroused and still walk no better. Random and frozen never learn, and the
+bar says so.
 
 Buttons: pause and resume; recentre (the body returns to the origin, nothing else changes);
 save and load (`runs/spider.npz` and its sidecar `runs/spider.json`); the policy that commands

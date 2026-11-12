@@ -235,7 +235,37 @@ function update(m) {
     ? 'last blocks (100 moments): ' + blocks.map(b => `${b.forward_m >= 0 ? '+' : ''}${b.forward_m.toFixed(3)} m, ${b.reward_per_moment.toFixed(3)} r`).join(' · ')
     : '';
   $('notes').textContent = m.notes.join('\n');
+  learning(m);
   strip(m);
+}
+
+// --- the learning bar: 0 "Brain Stall" to 100 "Learning" ------------------------------------
+// The brain learns only while aroused (routine moments are greedy and change nothing), so the
+// bar is the aroused share of the brain's last LEARNING_BLOCKS blocks, 0-100. Before the first
+// block closes it follows the mode of the moment. Random and frozen never learn: the bar stays
+// empty and the note says why. It is a reading of the arousal law, not a measure of a gait.
+const LEARNING_BLOCKS = 10;
+function learning(m) {
+  const pct = $('learning-pct'), cover = $('learning-cover'), note = $('learning-note');
+  let score = null, text = '';
+  if (m.policy !== 'brain') {
+    score = 0;
+    text = m.policy === 'random' ? 'the random control never learns' : 'the frozen copy never learns';
+  } else {
+    const blocks = m.blocks.filter(b => b.policy === 'brain').slice(-LEARNING_BLOCKS);
+    if (blocks.length) {
+      const share = blocks.reduce((s, b) => s + b.aroused_share, 0) / blocks.length;
+      const sweeps = blocks.reduce((s, b) => s + b.learning_sweeps, 0);
+      score = Math.round(100 * share);
+      text = `aroused in ${score}% of the last ${blocks.length * 100} moments · ${sweeps} learning sweeps`;
+    } else {
+      score = m.mode === 'aroused' ? 100 : 0;
+      text = 'no block closed yet · following the mode of the moment';
+    }
+  }
+  pct.textContent = score;
+  cover.style.width = (100 - score) + '%';
+  note.textContent = text;
 }
 
 // --- the brain strip: sensory, association and motor activity of the moment ----------------
