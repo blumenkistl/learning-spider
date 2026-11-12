@@ -6,6 +6,12 @@ Under position servos (``Spider(motors="target")``) each joint also has a held s
 of the body as the angle is; ``Senses(setpoints=True)`` reads the sixteen setpoints too, through
 the same code, so that the brain sees whether a joint is on its way or at rest. It is an option
 named in every reading made under it (README, "The setpoint senses").
+
+``Senses(compass=True)`` adds a compass: the cosine and sine of the body's heading in the
+world, through the same code. Without it the brain senses its yaw rate and nothing of where it
+is pointed, which is all the plain law asks of it; the course law (README, "The course") pays
+progress along a fixed world heading, and the compass is the sense that heading can be read
+from. It is an option named in every reading made under it (README, "The compass").
 """
 
 from __future__ import annotations
@@ -25,16 +31,20 @@ READING_NAMES = (
 RANGES = [HIP_RANGE] * LEGS + [KNEE_RANGE] * LEGS + [SPEED_RANGE, YAW_RANGE]
 SETPOINT_NAMES = [f"hip{i}_set" for i in range(LEGS)] + [f"knee{i}_set" for i in range(LEGS)]
 SETPOINT_RANGES = [HIP_RANGE] * LEGS + [KNEE_RANGE] * LEGS
+COMPASS_NAMES = ["heading_cos", "heading_sin"]     # the heading as a point on the circle: no seam at ±pi
+COMPASS_RANGES = [(-1.0, 1.0), (-1.0, 1.0)]
 
 
 class Senses:
     """A fixed population code over the readings plus the planted flags; with ``setpoints``
-    the servos' setpoints are readings too (only a body with target motors has them)."""
+    the servos' setpoints are readings too (only a body with target motors has them), with
+    ``compass`` the heading's cosine and sine."""
 
-    def __init__(self, per: int = PER, setpoints: bool = False):
+    def __init__(self, per: int = PER, setpoints: bool = False, compass: bool = False):
         self.setpoints = bool(setpoints)
-        self.names = list(READING_NAMES) + (SETPOINT_NAMES if self.setpoints else [])
-        self.ranges = list(RANGES) + (SETPOINT_RANGES if self.setpoints else [])
+        self.compass = bool(compass)
+        self.names = list(READING_NAMES) + (SETPOINT_NAMES if self.setpoints else []) + (COMPASS_NAMES if self.compass else [])
+        self.ranges = list(RANGES) + (SETPOINT_RANGES if self.setpoints else []) + (COMPASS_RANGES if self.compass else [])
         self.code = PopulationCode(self.ranges, per=per)
         self.per = per
         self.inputs = self.code.inputs + LEGS
@@ -45,10 +55,12 @@ class Senses:
             if spider.motors != "target":
                 raise ValueError("the setpoint senses need a body with target motors")
             own += [spider.targets[:, 0], spider.targets[:, 1]]
+        if self.compass:
+            own += [[np.cos(spider.heading), np.sin(spider.heading)]]
         return np.concatenate(own)
 
     def observe(self, spider: Spider) -> np.ndarray:
-        coded = self.code(self.readings(spider))                  # (1, per * 18, or 34 with setpoints)
+        coded = self.code(self.readings(spider))                  # (1, per * 18; 34 with setpoints, 2 more with the compass)
         flags = spider.planted().astype(np.float64)[None, :]      # (1, 8)
         return np.concatenate([coded, flags], axis=1)
 
@@ -59,6 +71,10 @@ class Senses:
                 names.append(f"{name}@{value:+.2f}")
         names += [f"planted{i}" for i in range(LEGS)]
         return names
+
+    def options(self) -> dict:
+        """What a sidecar or a birth names of the senses, beside ``per``."""
+        return {"per": self.per, "setpoints": self.setpoints, "compass": self.compass}
 
 
 DEFAULT = Senses()

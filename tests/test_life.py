@@ -6,6 +6,7 @@ import pytest
 from spider.body import JOINTS, Spider
 from spider.brain import SpiderBrain
 from spider.life import BLOCK, PROGRESS_PAY, Life, pay
+from spider.senses import Senses
 
 
 class RecordingPolicy:
@@ -465,3 +466,71 @@ def test_a_saved_life_keeps_its_seed_and_senses(tmp_path):
     assert sum("keeps its own" in note for note in plain.notes) == 3        # seed, senses, motors
     for _ in range(3):
         assert life.tick()["pose"] == plain.tick()["pose"]
+
+
+def test_the_course_law_pays_a_line_and_not_a_circle(tmp_path):
+    """Under ``course`` the progress term is the moment's motion along one fixed heading of the
+    world: the same strokes pay in full along it, nothing across it, and backward against it;
+    along the body's own heading they pay the same whichever way the body points."""
+    import math
+
+    def earned(heading, **law):
+        life = Life("random", seed=0, pace=0, runs=tmp_path, **law)
+        life.policy = RecordingPolicy()                      # every hip sweeps back: forward progress
+        life.body.heading = heading
+        for _ in range(40):
+            life.tick()
+        return sum(r for r in life.policy.rewards if r is not None), life
+
+    plain_0, plain = earned(0.0)
+    plain_side, _ = earned(math.pi / 2)
+    assert plain_0 > 0.5 and plain_side == pytest.approx(plain_0)   # the plain law does not care where the body points
+    along, life = earned(0.0, course=0.0)
+    across, _ = earned(math.pi / 2, course=0.0)
+    against, _ = earned(math.pi, course=0.0)
+    assert along == pytest.approx(plain_0) and life.distance_course == pytest.approx(life.distance_forward)
+    assert across == pytest.approx(0.0, abs=0.02) and against == pytest.approx(0.0)  # backward is free under the course too
+    charged, _ = earned(math.pi, course=0.0, backward_pay=1.0)
+    assert charged < -0.5
+    assert life.describe()["reward"]["course"] == 0.0
+    assert sum(r["course"] for r in life._block) == pytest.approx(life.distance_course)
+    assert plain.distance_course == pytest.approx(plain.distance_forward)   # without a course: along the birth heading
+    assert Life("random", seed=0, pace=0, runs=tmp_path, course=True).course == 0.0        # true is the birth heading
+    assert Life("random", seed=0, pace=0, runs=tmp_path, course=7.0).course == pytest.approx(7.0 - 2 * math.pi)
+    assert Life("random", seed=0, pace=0, runs=tmp_path).course is None
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs=tmp_path, course=float("nan"))
+
+
+def test_the_course_is_set_live_as_the_heading_held_and_is_saved(tmp_path):
+    from spider.life import checked_course
+
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", senses=Senses(compass=True))
+    assert life.describe()["compass"] is True and life.describe()["inputs"] == 8 * 20 + 8
+    for _ in range(5):
+        life.tick()
+    life.body.heading = 0.7
+    life.distance_course = 9.0                               # nothing was along a course yet: must start at zero
+    report = life.control("law", {"course": True})
+    assert report["changed"] and report["law"]["course"] == pytest.approx(0.7)
+    assert life.course == pytest.approx(0.7) and life.distance_course == 0.0 and life.mark == 0.0
+    assert "course 0.70 rad" in life.notes[-1] and len(life.law_changes) == 1
+    assert life.control("law", {"course": True})["changed"] is False          # ticked again: the same course
+    for _ in range(3):
+        life.tick()
+    assert life.latest["distance_course"] == pytest.approx(life.distance_course)
+    life.save()
+    again = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")    # plain law, plain senses asked
+    assert again.load()["custody"] == "kept"
+    assert again.course == pytest.approx(0.7) and again.distance_course == pytest.approx(life.distance_course)
+    assert again.senses.compass is True and again.policy.brain.inputs == 8 * 20 + 8
+    assert any("a compass" in note for note in again.notes)
+    for _ in range(3):
+        assert life.tick()["pose"] == again.tick()["pose"]
+    off = life.control("law", {"course": None})
+    assert off["changed"] and life.course is None and life.mark == pytest.approx(life.distance_forward)
+    assert checked_course("birth") == 0.0 and checked_course("off") is None and checked_course("1.5") == 1.5
+    born = life.control("reset", {"compass": False})
+    assert born["compass"] is False and life.senses.compass is False and life.distance_course == 0.0
+    with pytest.raises(ValueError):
+        life.reset({"heading": 1.0})

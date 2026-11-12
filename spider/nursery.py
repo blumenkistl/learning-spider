@@ -23,16 +23,17 @@ from typing import Any
 
 from .body import DEFAULT_MOTORS, MOTORS
 from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
-from .life import BACKWARD_PAY, BLOCK, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
+from .life import (BACKWARD_PAY, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
+                   Life, checked_course)
 from .senses import PER, Senses
 
 
 HEAD = (f"{'moment':>7} {'forward_m':>9} {'r/moment':>8} {'aroused':>7} {'sweeps':>6} "
-        f"{'learn':>6} {'refused':>7} {'ms':>6} {'stance':>6} {'turned':>7}")
+        f"{'learn':>6} {'refused':>7} {'ms':>6} {'stance':>6} {'turned':>7} {'course_m':>8}")
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    senses = Senses(per=args.per or PER, setpoints=args.setpoints)
+    senses = Senses(per=args.per or PER, setpoints=args.setpoints, compass=args.compass)
     genes = genes_from(args.gene) or None
     runs = args.save.parent if args.save else Path("runs")
     name = args.save.stem if args.save else "spider"
@@ -42,7 +43,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 brain_path=None if continuing else args.brain,
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
                 yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water, old_ground=args.old_ground,
-                pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay)
+                pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay,
+                course=args.course)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -53,6 +55,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     window: list[dict[str, Any]] = []
     mark = life.distance_forward
+    course_mark = life.distance_course
     turned_mark = life.turned
     if not args.quiet:
         print(HEAD, flush=True)
@@ -70,16 +73,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "ms_per_moment": round(sum(w["ms"] for w in window) / block, 2),
                 "mean_stance": round(sum(sum(w["pose"]["planted"]) for w in window) / block, 2),
                 "turned_rad": round(life.turned - turned_mark, 3),
+                "course_m": round(life.distance_course - course_mark, 4),
             }
             rows.append(row)
             mark = life.distance_forward
+            course_mark = life.distance_course
             turned_mark = life.turned
             window = []
             if not args.quiet:
                 print(f"{row['moment']:>7} {row['forward_m']:>9.3f} {row['reward_per_moment']:>8.4f} "
                       f"{row['aroused_share']:>7.2f} {row['sweeps_per_moment']:>6.1f} {row['learning_sweeps']:>6} "
                       f"{row['refused']:>7} {row['ms_per_moment']:>6.2f} {row['mean_stance']:>6.2f} "
-                      f"{row['turned_rad']:>7.2f}", flush=True)
+                      f"{row['turned_rad']:>7.2f} {row['course_m']:>8.3f}", flush=True)
     elapsed = time.perf_counter() - began
     half = len(rows) // 2
     summary: dict[str, Any] = {
@@ -88,6 +93,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "moments": args.moments,
         "from_moment": started,
         "forward_m": round(sum(r["forward_m"] for r in rows), 4),
+        "course_m": round(sum(r["course_m"] for r in rows), 4),
         "first_half_m": round(sum(r["forward_m"] for r in rows[:half]), 4),
         "second_half_m": round(sum(r["forward_m"] for r in rows[half:]), 4),
         "refused": int(sum(r["refused"] for r in rows)),
@@ -101,6 +107,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "motors": life.motors,
         "per": life.senses.per,
         "setpoints": life.senses.setpoints,
+        "compass": life.senses.compass,
         "blocks": rows,
     }
     if args.save and life.brain is not None:
@@ -121,10 +128,15 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
     parser.add_argument("--setpoints", action="store_true",
                         help="sense the servos' setpoints too (needs --motors target; sixteen readings more)")
+    parser.add_argument("--compass", action="store_true",
+                        help="sense the heading too, its cosine and sine (two readings more): the sense the course law is read by")
     parser.add_argument("--stance-pay", type=float, default=STANCE_PAY,
                         help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
     parser.add_argument("--yaw-pay", type=float, default=YAW_PAY,
                         help=f"reward taken per radian turned in a moment (default {YAW_PAY}; 0 = off)")
+    parser.add_argument("--course", type=checked_course, default=COURSE,
+                        help="pay progress along this fixed heading of the world (radians; 'birth' or 0 is the heading at "
+                             "birth) instead of along the body's own heading (default off)")
     parser.add_argument("--window", type=int, default=PROGRESS_WINDOW,
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--high-water", action="store_true", default=HIGH_WATER,

@@ -23,7 +23,7 @@ python3 -m venv .venv
 
 Open http://127.0.0.1:8080. Drag to turn the world horizontally, use the wheel to zoom. The
 panel shows the moment, the brain's mode (aroused or routine), forward distance, the reward
-just earned, the law it is paid under (progress or a window, the high-water mark with its
+just earned, the law it is paid under (progress or a window, the course with the metres along it, the high-water mark with its
 current mark, any shaping term), arousal level and want, the sweeps of the last settle, milliseconds per moment,
 a learning bar, and a strip of the brain's settled state: sensory inputs, association units,
 and for each of the sixteen joints its three motor units with the chosen command outlined.
@@ -54,11 +54,12 @@ save and load (`runs/spider.npz` and its sidecar `runs/spider.json`); reset, whi
 confirmation and then ends the life: a newborn brain takes the body, the world
 returns to the origin, every counter is zero and the saved life is deleted; the policy that commands
 the body, `brain`, `random` or a `frozen copy` of the live brain; the pace, 1× (20 moments a
-second, the body's own clock), 2×, 5× or as fast as the machine goes.
+second, the body's own clock), 2×, 5× or as fast as the machine goes; the HUD's pace line
+shows the pace asked for and the moments a second the loop actually makes.
 
 Every reading, button and setting on the panel explains itself on mouse-over, with the measured dose where one exists. Under the buttons, a collapsed `settings` line opens two columns. **law, live** holds the
-reward's seven settings (the stance and yaw hints, the window, the high-water mark and its leak,
-the pay per metre and the backward charge) and `Apply law` changes them from the next moment on;
+reward's eight settings (the stance and yaw hints, the window, the high-water mark and its leak,
+the pay per metre, the backward charge and the course) and `Apply law` changes them from the next moment on;
 the outcome already earned is delivered as it was earned, and the same law is no change. A life
 whose law changed is not a life under one law: it is a schedule, and the page says so. Every
 change is noted ("law changed at moment N: …, this life is a schedule"), counted on the law
@@ -86,13 +87,14 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--policy` (`brain`), `--seed` (0), `--pace` (20), `--backend` (auto), `--runs` (`runs`),
 `--autosave-minutes` (5), `--gene` and `--per` for a newborn brain, and the reward's settings
 `--stance-pay` (0), `--yaw-pay` (0), `--window` (1), `--high-water` (off), `--old-ground` (0),
-`--pay-per-metre` (40) and `--backward-pay` (0), the two hints, the window, the high-water
-mark and its leak, the gain and
-the backward charge described under [the reward](#the-reward-spiderlifepy), `--motors`
-(`target` since 2026-11-12, `rate` before) for a newborn's body and `--setpoints` (off) to sense the servos' setpoints too. An
+`--pay-per-metre` (40), `--backward-pay` (0) and `--course` (off), the two hints, the window, the high-water
+mark and its leak, the gain, the backward charge and the course
+described under [the reward](#the-reward-spiderlifepy), `--motors`
+(`target` since 2026-11-12, `rate` before) for a newborn's body, `--setpoints` (off) to sense the servos' setpoints too
+and `--compass` (off) to sense the heading. An
 environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
 `AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `OLD_GROUND`, `PAY_PER_METRE`,
-`BACKWARD_PAY`, `MOTORS`, `SETPOINTS`) sets a flag's
+`BACKWARD_PAY`, `COURSE`, `MOTORS`, `SETPOINTS`, `COMPASS`) sets a flag's
 default. A saved life is continued with its own genes, seed, senses, motors and law, each
 noted when a flag asked for another (a life saved before the sidecar carried the law, the seed
 and the senses takes them from the flags, as before), and the high-water mark of a life saved
@@ -207,6 +209,13 @@ inputs): the brain senses what it last told each servo, which is its own state, 
 world's. It is an option of the senses, measured under [the setpoint senses](#the-setpoint-senses),
 and a saved brain's senses are fixed as with `--per`.
 
+The brain senses its yaw rate and nothing of where it is pointed, which is all the plain law
+asks of it. `--compass` adds the heading as a point on the circle, its cosine and sine, through
+the same code (168 inputs): the world's heading, 0 the heading at birth, not the course. It is
+the sense the course law can be read by (a brain without it is paid for a line it cannot
+sense), an option of the senses like the setpoints, named in every reading made under it and
+measured under [the course](#the-course); the page's "next birth" has it as `compass`.
+
 ### The reward (`spider/life.py`)
 
 `reward = clip(40 × progress, 0, 0.5) − stance_pay × max(0, 4 − stance) − yaw_pay × |turn|`,
@@ -234,6 +243,17 @@ share S of what a metre forward pays, under the same cap: at 1 a jitter nets not
 stroke pays, at 0 backward is free. The first law charged backward in full and was left
 because the brain lifted every foot to avoid it, on a body where that was free; "The backward
 pay" below has it measured again on this body. The default stays 0.
+`--course H` (`COURSE` for the server, default off) is the course law: the progress term is
+the moment's motion along one fixed heading of the world, H radians (0, or `birth`, is the
+heading at birth), instead of along the body's own heading. It is not a hint: the same outcome,
+the body's motion, measured along one line instead of a turning one, so that a circle nets
+nothing over a round and only a line pays; backward along the course is free or charged as
+`--backward-pay` says, and the window and the high-water mark apply to the distance along the
+course. The page's law panel sets it live as the heading the body holds at that moment ("keep
+going this way"), which starts the metres along it and the mark at zero; the heading is shown
+on the law line with the metres along it, saved and loaded with the life. The compass above is
+the sense that heading can be read from. Its readings are under "The course" below; the default
+stays off.
 
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
 is paying for a posture and a course, not for an outcome. Both ship switched off
@@ -307,10 +327,12 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --backward-pay 1   # charge backward as forward pays
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors rate      # the founder's rate motors (the default until 2026-11-12)
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --setpoints        # the servos' setpoints sensed too
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass  # pay the line of the birth heading, sensed by a compass
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
-and learning sweeps per moment, refusals, ms per moment, mean feet planted, radians turned) and a JSON
+and learning sweeps per moment, refusals, ms per moment, mean feet planted, radians turned,
+metres along the course or, without one, along the birth heading) and a JSON
 summary (`--json path` writes it).
 
 ### Readings
@@ -1366,7 +1388,7 @@ moments, 0.26 m a thousand moments at 1.6 ms a moment, and it turns with it: −
 3000, a circle of about a metre's radius, so the body that walked 7.7 m forward in the
 continuation is 1.2 m from where it started it. The law pays forward along the heading and
 never asked for a straight line (the yaw term above is the hint for that, and it stopped
-every walk it was dosed on). Seed 0 under entropy fell calm by 5000 moments into the rock
+every walk it was dosed on; the course law, "The course" below, is the law that asks for one). Seed 0 under entropy fell calm by 5000 moments into the rock
 (0.070 a moment, three feet planted, aroused 0.00 for 25,000 moments). The copies walk 0.07–0.12, under
 the sweep: both cycles are the sampled policy's, not the greedy answer's. The hold at 0.9
 and 0.97 and maturity change nothing a seed holds: hold 0.9 gains +0.30 in its last block
@@ -1419,10 +1441,57 @@ observation is wider than the cortex should read or whose members share contexts
 should carry across, is not this world, whose 152 inputs are already a code (the population
 code, "The senses").
 
+**The course.** The course law (`--course`, "The reward") measures the same outcome, the
+moment's motion, along one fixed heading of the world instead of along the body's own, so
+that a circle nets nothing; the compass (`--compass`, "The senses") gives the brain that
+heading's cosine and sine, 168 inputs. Servos, gamma 0.99, seeds 0–2, 30,000 moments, the
+course the birth heading (0), backward pay 0 and window 1 as in the founder; random under the
+course law; frozen copies at 3000 moments. The first number of a cell is the metres along the
+course, every life's, the plain-law lives' along their birth heading:
+
+| 30,000 moments, metres along the course (forward metres; course metres in the last 5000; rad turned; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99 (the founder, plain law) | +0.876 (+1.69; +0.04; 150; 3.8 → 5.0; 0.00; 0.049) | +0.110 (+0.94; +0.03; 113; 3.1 → 3.9; 0.98; 0.025) | +0.841 (+0.67; +0.06; 107; 3.8 → 4.8; 0.99; 0.025) |
+| course 0 | +0.503 (+0.40; +0.06; 211; 3.9 → 4.3; 0.92; 0.028) | −0.291 (−0.07; −0.15; 167; 2.2 → 4.2; 0.92; 0.026) | +1.188 (+1.37; +0.16; 205; 3.6 → 3.3; 0.63; 0.043) |
+| compass, plain law | −0.174 (−0.11; −0.09; 111; 4.4 → 4.9; 1.00; 0.023) | +0.796 (+1.06; +0.01; 152; 4.2 → 3.6; 0.90; 0.025) | +0.291 (+0.36; +0.03; 118; 5.3 → 4.0; 0.96; 0.029) |
+| course 0, compass | +0.312 (+0.42; −0.02; 183; 4.9 → 5.0; 0.00; 0.041) | +0.594 (+0.21; +0.38; 220; 3.3 → 4.0; 0.82; 0.033) | +0.403 (+0.35; −0.02; 113; 5.4 → 4.8; 0.99; 0.022) |
+| course 0, compass, entropy 0.1 | +0.824 (+0.90; −0.01; 178; 3.8 → 4.0; 0.00; 0.050) | +1.075 (+1.30; +0.01; 241; 3.8 → 3.0; 0.00; 0.046) | +2.890 (+3.67; +0.14; 208; 3.8 → 3.9; 0.72; 0.038) |
+| random, course 0 | −0.880 (−1.13; +0.04; 260; 2.9 → 3.1; 0.033) | +0.934 (+0.51; +0.11; 266; 3.1 → 3.2; 0.037) | −0.458 (−0.12; −0.01; 256; 3.1 → 3.3; 0.046) |
+| frozen newborn with the compass, 3000 moments, course metres | +0.018 | +0.131 | −0.078 |
+| frozen copies, 3000 moments, course metres (course / compass / both / both with entropy) | 0.093 / 0.149 / 0.094 / 0.112 | 0.118 / 0.110 / −0.018 / 0.132 | 0.073 / 0.154 / 0.152 / 0.151 |
+| course 0, compass, entropy 0.1, per 5000 moments, course / forward | +0.84 0.00 −0.01 0.00 0.00 −0.01 / +0.90 0.00 −0.01 0.00 0.00 −0.01 | +0.32 +0.73 +0.01 +0.01 +0.01 +0.01 / +0.54 +0.77 0.00 0.00 0.00 0.00 | +0.90 +0.68 +0.04 +0.45 +0.68 +0.14 / +0.72 +0.92 +0.25 +0.48 +0.86 +0.43 |
+
+**Reading:** the course law closes the circle and not the sway. Under the plain law the
+founder's seed 0 walked a round: +1.69 m forward and +0.88 along its birth heading, with one
+window of 5000 moments in which it went +0.45 forward and −0.24 along the heading; under the
+course law no life nets that way, since a round pays nothing. But a sway along the course
+pays as well as it does under the plain law, because backward along the course is free
+(backward pay 0) and the window is one moment: three of the nine course lives fell calm into
+one (course with compass seed 0 at 900 moments, with entropy seeds 0 and 1 at 2800 and 6500)
+and earn 0.041–0.050 a moment from it, the founder's calm seed 0's 0.049, netting −0.02 to
++0.01 m per 5000 moments along the course. The compass by itself changes nothing (−0.17 /
++0.80 / +0.29 against +0.88 / +0.11 / +0.84, aroused to the end on every seed); the course
+alone, with and without the compass, is within the baseline's spread (+0.50 / −0.29 / +1.19
+and +0.31 / +0.59 / +0.40), and every course life turns more than the plain-law lives
+(167–241 rad against 107–152: a heading is not a sense of the plain law's body, and under the
+course law a turn is what the brain can do to change what the same stroke pays). The one
+life that goes the farthest along a line of this project is the course with the compass and
+the entropy term at 0.1 on seed 2: +2.89 m along the birth heading and +3.67 forward, still
+aroused (0.72) and still learning at 30,000 moments, every window positive along the course
+(+0.90 +0.68 +0.04 +0.45 +0.68 +0.14), 0.79 of its forward metres along the course against the
+founder's seed 0's 0.52, 208 rad turned. One seed is a life, not a dose; the entropy term is
+the gene that walked the founder's seeds too ("The entropy term"), and whether the course adds
+to it is seeds 3–5. The copies walk 0.09–0.15, the greedy answer's. Random under the course law
+is −0.88 / +0.93 / −0.46: a random walk's course metres are as wide as its forward ones. The
+course costs 4.8–5.4 ms a moment learning and 2.3–2.7 calm, the founder's. Both stay off:
+they are named in every reading, and what the sway shows is that a line is the course with
+the backward pay on or a window, the next thing to measure.
+
 What a next step would measure, each against the same controls and on the eight-legged body:
 the finer code with the stance term over a longer life, the one gene that moved the first
-block; and a course hint on the net heading drift over a
-window rather than the unsigned turn. The horizon past 0.99, the setpoints as senses, the
+block; and the course law with the backward pay at 1 or a window, so that the sway it
+leaves pays nothing along the line, with and without the compass, on seeds 3–5 with the entropy
+term at 0.1 beside it. The horizon past 0.99, the setpoints as senses, the
 leaking mark, the recall memory, the temperature, the actor's hold and maturity, and the
 observation codes (fixed and learned) are measured above and change nothing after the first
 block, the codes losing it; the critic's rate at 20 held one seed's slow

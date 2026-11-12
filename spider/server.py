@@ -8,9 +8,9 @@ WebSocket at the life's pace (at most 30 frames a second) and takes controls as 
 The flags are the nursery's (``python server.py --help``). Each has an environment variable
 of the same meaning that sets its default: HOST (127.0.0.1), PORT (8080), POLICY (brain),
 SEED (0), PACE (20 moments/s), BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs),
-AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), OLD_GROUND (0), PAY_PER_METRE (40)
-and BACKWARD_PAY (0), the reward's settings, MOTORS (target) for a newborn's body and SETPOINTS (0) to
-sense the servos' setpoints too. A saved life in RUNS is continued, with its own genes, seed,
+AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), OLD_GROUND (0), PAY_PER_METRE (40),
+BACKWARD_PAY (0) and COURSE (off), the reward's settings, MOTORS (target) for a newborn's body, SETPOINTS (0) to
+sense the servos' setpoints too and COMPASS (0) to sense the heading. A saved life in RUNS is continued, with its own genes, seed,
 senses, motors and law; shutdown saves it. The page's settings change the law on the living
 brain (control ``law``) and name the next birth (control ``reset`` with a value).
 """
@@ -27,7 +27,8 @@ from pathlib import Path
 from aiohttp import web
 
 from .body import DEFAULT_MOTORS, MOTORS
-from .life import BACKWARD_PAY, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life
+from .life import (BACKWARD_PAY, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life,
+                   checked_course)
 from .nursery import genes_from, parse_gene
 from .senses import PER, Senses
 
@@ -128,10 +129,15 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
     parser.add_argument("--setpoints", action="store_true", default=_flag("SETPOINTS", False),
                         help="sense the servos' setpoints too, for a newborn (needs --motors target)")
+    parser.add_argument("--compass", action="store_true", default=_flag("COMPASS", False),
+                        help="sense the heading too (its cosine and sine), for a newborn: the sense the course law is read by")
     parser.add_argument("--stance-pay", type=float, default=float(env("STANCE_PAY", STANCE_PAY)),
                         help=f"reward taken per foot short of half the feet planted (default {STANCE_PAY}; 0 = off)")
     parser.add_argument("--yaw-pay", type=float, default=float(env("YAW_PAY", YAW_PAY)),
                         help=f"reward taken per radian turned in a moment (default {YAW_PAY}; 0 = off)")
+    parser.add_argument("--course", type=checked_course, default=checked_course(env("COURSE", COURSE)),
+                        help="pay progress along this fixed heading of the world (radians; 'birth' or 0 is the heading at "
+                             "birth) instead of along the body's own heading (default off)")
     parser.add_argument("--window", type=int, default=int(env("PROGRESS_WINDOW", PROGRESS_WINDOW)),
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--high-water", action="store_true", default=_flag("HIGH_WATER", HIGH_WATER),
@@ -157,7 +163,7 @@ def life_from(args: argparse.Namespace) -> Life:
         runs=args.runs,
         genes=genes_from(args.gene) or None,
         backend=args.backend,
-        senses=Senses(per=args.per or PER, setpoints=args.setpoints),
+        senses=Senses(per=args.per or PER, setpoints=args.setpoints, compass=args.compass),
         stance_pay=args.stance_pay,
         yaw_pay=args.yaw_pay,
         window=args.window,
@@ -166,6 +172,7 @@ def life_from(args: argparse.Namespace) -> Life:
         pay_per_metre=args.pay_per_metre,
         motors=args.motors,
         backward_pay=args.backward_pay,
+        course=args.course,
     )
     life.autosave_minutes = float(args.autosave_minutes)
     if args.policy == "brain" and life.brain_file.exists():

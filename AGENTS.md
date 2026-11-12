@@ -40,7 +40,12 @@ without a page, for measurement.
   (off by default: no measured dose straightened the course without stopping the walk).
   Both are labelled as shaping, their readings are in the README, and `--stance-pay` and
   `--yaw-pay` in the nursery and the server, or the same names in the server's environment,
-  set them. The page's "law, live" changes the seven settings on the living brain
+  set them. The course law (`--course`, `COURSE`; off by default) is not a hint either: the
+  same outcome, the moment's motion, measured along one fixed heading of the world instead of
+  along the body's own, so that a circle nets nothing; the brain reads that heading through
+  the compass sense (`--compass`, a birth option like the setpoints: the heading's cosine and
+  sine through the population code), and both are named in every reading made under them.
+  The page's "law, live" changes the eight settings on the living brain
   (`Life.set_law`, control `law`); a life whose law changed is a schedule, a different model
   from a life under one law, so every change is noted, counted on the page's law line,
   reported as `law_changes` and saved with the life, and the sidecar's law outranks the flags

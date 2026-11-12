@@ -215,15 +215,16 @@ fetch('/api/describe').then(r => r.json()).then(d => {
 function describedBy(d) {
   described = d;
   if (lastState) $('law').textContent = law(lastState);
-  $('motors').textContent = (d.motors || 'rate') + (d.setpoints ? ', setpoints sensed' : '');
+  $('motors').textContent = (d.motors || 'rate') + (d.setpoints ? ', setpoints sensed' : '') + (d.compass ? ', a compass' : '');
   const r = d.reward || {};
   for (const k of LAW_KEYS) {
     const field = $('law-' + k);
-    if (field.type === 'checkbox') field.checked = !!r[k]; else field.value = r[k];
+    if (field.type === 'checkbox') field.checked = r[k] !== null && r[k] !== undefined && r[k] !== false; else field.value = r[k];
   }
   $('birth-seed').value = d.seed;
   $('birth-motors').value = d.motors || 'target';
   $('birth-setpoints').checked = !!d.setpoints;
+  $('birth-compass').checked = !!d.compass;
   const genes = { ...(d.genes || {}) };
   $('birth-hold').value = genes.hold == null ? '' : genes.hold;
   $('birth-entropy').value = genes.entropy == null ? 0 : genes.entropy;
@@ -234,7 +235,7 @@ function describedBy(d) {
   $('birth-genes').value = geneWords(genes);
   $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
 }
-const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay'];
+const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course'];
 // The nursery's words for a brain's gene overrides: {gamma: 0.99, arousal: {need: 0}} → "gamma=0.99 arousal.need=0".
 function geneWords(genes, prefix = '') {
   return Object.entries(genes || {}).map(([k, v]) =>
@@ -252,6 +253,7 @@ function law(m) {
   const r = described && described.reward;
   if (!r) return '—';
   const parts = [r.window > 1 ? `window ${r.window}` : 'progress'];
+  if (r.course !== null && r.course !== undefined) parts.push(`course ${fmt(r.course, 2)} rad · along it ${fmt(m.distance_course)} m`);
   if (r.pay_per_metre !== 40) parts.push(`${r.pay_per_metre}/m`);
   if (r.backward_pay) parts.push(`backward ${r.backward_pay}`);
   if (r.high_water) parts.push(`high-water${r.old_ground ? ' leaking ' + r.old_ground : ''} · mark ${fmt(m.mark)} m`);
@@ -322,7 +324,7 @@ function update(m) {
   $('arousal').textContent = `${fmt(m.level, 2)} / ${fmt(m.want, 2)}`;
   $('sweeps').textContent = `${m.sweeps} (${m.learning_sweeps} learning)`;
   $('ms').textContent = fmt(m.ms, 1);
-  $('pace').textContent = m.pace > 0 ? `${m.pace}/s` : 'max';
+  $('pace').textContent = (m.pace > 0 ? `${m.pace}/s` : 'max') + (m.rate > 0 ? ` · ${fmt(m.rate, 0)}/s made` : '');
   $('stance').textContent = m.pose.planted.filter(Boolean).length + ' / ' + m.pose.planted.length;
   $('turned').textContent = `${fmt(m.turned, 1)} rad (${fmt(m.omega, 2)} rad/s)`;
   $('refusals').textContent = m.refusals;
@@ -423,11 +425,12 @@ function birth() {
   if (Number($('birth-code').value) > 0) words.push('code=' + Math.round(Number($('birth-code').value)));
   if (Number($('birth-learned-code').value) > 0) words.push('learned_code=' + Math.round(Number($('birth-learned-code').value)));
   return { seed: Number($('birth-seed').value), motors: $('birth-motors').value,
-           setpoints: $('birth-setpoints').checked, genes: words.filter(Boolean).join(' ') };
+           setpoints: $('birth-setpoints').checked, compass: $('birth-compass').checked,
+           genes: words.filter(Boolean).join(' ') };
 }
 function resetQuestion(b) {
   return 'Reset everything?\n\nA newborn brain replaces the live one: seed ' + b.seed + ', ' + b.motors + ' motors'
-    + (b.setpoints ? ', setpoints sensed' : '') + ', ' + (b.genes ? 'genes ' + b.genes : 'founder genes') + '.\n'
+    + (b.setpoints ? ', setpoints sensed' : '') + (b.compass ? ', a compass' : '') + ', ' + (b.genes ? 'genes ' + b.genes : 'founder genes') + '.\n'
     + 'The world returns to the origin, every counter goes to zero and the saved life in runs/ is deleted.\n\n'
     + 'The brain that has lived until now is gone for good.';
 }
@@ -452,6 +455,10 @@ $('apply-law').addEventListener('click', async () => {
     const field = $('law-' + k);
     value[k] = field.type === 'checkbox' ? field.checked : Number(field.value);
   }
+  // the course box: ticked on a life with a course keeps that heading; ticked on one without, the
+  // server takes the heading the body holds now (true); unticked is off (null)
+  const had = described && described.reward ? described.reward.course : null;
+  value.course = value.course ? (had === null || had === undefined ? true : had) : null;
   if (await control({ op: 'law', value })) refreshDescription();
 });
 

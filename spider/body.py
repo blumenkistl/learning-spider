@@ -187,8 +187,9 @@ class Spider:
         """Apply sixteen commands in ``{0: decrease, 1: hold, 2: increase}`` (joint order
         hip0, knee0, hip1, knee1, ...), move the body by what its planted feet did, and
         return ``progress`` (metres along the heading held at the start of the moment),
-        ``turn`` (radians the heading changed this moment), ``stance`` (feet planted at both
-        moments) and ``recentred``."""
+        ``moved`` (the same motion as a world displacement, x and y, which a recentre does not
+        touch), ``turn`` (radians the heading changed this moment), ``stance`` (feet planted
+        at both moments) and ``recentred``."""
         cmd = np.asarray(commands, dtype=float).reshape(LEGS, 2) - 1.0
         if not np.all(np.isin(cmd, (-1.0, 0.0, 1.0))):
             raise ValueError("commands must be 0, 1 or 2 per joint")
@@ -243,7 +244,8 @@ class Spider:
         if math.hypot(self.x, self.y) > ARENA_RADIUS:
             self.recentre()
             recentred = True
-        return {"progress": float(progress), "turn": float(turn), "stance": count, "recentred": recentred}
+        return {"progress": float(progress), "moved": (float(world[0]), float(world[1])), "turn": float(turn),
+                "stance": count, "recentred": recentred}
 
     def recentre(self) -> None:
         """Put the body back at the origin. Joints, heading, velocity and the contact history

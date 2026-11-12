@@ -96,3 +96,22 @@ def test_the_setpoint_senses_are_an_option_of_target_motors():
     with pytest.raises(ValueError):
         senses.readings(Spider(motors="rate"))
     assert not Senses().setpoints and Senses().inputs == INPUTS
+
+
+def test_the_compass_senses_the_heading():
+    import math
+
+    senses = Senses(compass=True)
+    assert senses.inputs == 8 * 20 + LEGS and len(senses.input_names()) == senses.inputs
+    assert senses.input_names()[8 * 18] == "heading_cos@-1.00" and senses.options()["compass"] is True
+    spider = Spider()
+    assert np.allclose(senses.readings(spider)[18:], [1.0, 0.0])          # born facing the world's zero heading
+    spider.heading = math.pi / 2
+    assert np.allclose(senses.readings(spider)[18:], [0.0, 1.0])
+    spider.heading = -math.pi + 1e-9                                         # no seam at ±pi: the same point
+    assert np.allclose(senses.readings(spider)[18:], [-1.0, 0.0])
+    x = senses.observe(spider)
+    assert x.shape == (1, senses.inputs) and np.all(x >= 0.0) and np.all(x <= 1.0)
+    both = Senses(setpoints=True, compass=True)
+    assert both.inputs == 8 * 36 + LEGS and both.readings(Spider(motors="target")).shape == (36,)
+    assert not Senses().compass and Senses().options() == {"per": 8, "setpoints": False, "compass": False}

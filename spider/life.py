@@ -3,8 +3,9 @@ every outcome.
 
 A tick observes the body, hands the previous command's reward and this moment's observation to
 the policy, applies the returned commands to the body, and keeps the reward the body earned for
-the next tick. The reward is the world's: progress along the body's own heading, less two hints
-about how to go (feet short of four, radians turned).
+the next tick. The reward is the world's: progress along the body's own heading (or, under the
+course law, along one fixed heading of the world), less two hints about how to go (feet short
+of four, radians turned).
 Each outcome reaches the brain exactly once; a refusal keeps it owed, a policy switch keeps it
 owed, a save carries it, a load delivers it.
 
@@ -15,6 +16,7 @@ owed, a save carries it, a load delivers it.
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
 import threading
@@ -51,6 +53,11 @@ OLD_GROUND = 0.0        # under the mark, the share of a moment's progress on ol
                         # --old-ground / OLD_GROUND set it
 YAW_PAY = 0.0           # taken per radian turned in the moment: the hint to go straight, off (README: ignored at
                         # 0.1 and 1 a radian, obeyed at 5 by standing still); --yaw-pay / YAW_PAY switch it on
+COURSE = None           # the course law: pay progress along this fixed heading of the world (radians, 0 is the
+                        # heading at birth) instead of along the body's own, so that a circle nets nothing and a
+                        # line pays; None is off, the plain law. Not a hint: the same outcome, measured along one
+                        # heading instead of a turning one. The brain reads the heading through the compass
+                        # (Senses(compass=True)). --course / COURSE set it (README, "The course")
 BLOCK = 100             # moments per statistics block
 BLOCKS_KEPT = 60
 FORMAT = "learning-spider/1"
@@ -89,13 +96,32 @@ def _replace(path: Path, write) -> None:
             os.unlink(tmp)
 
 
-LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay")
+LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay", "course")
+
+
+def checked_course(course: Any) -> float | None:
+    """The course law's heading: None (or false) is off, true is the birth heading (0), a number
+    is that heading in radians, wrapped to (-pi, pi]."""
+    if course is None or course is False:
+        return None
+    if course is True:
+        return 0.0
+    if isinstance(course, str):
+        word = course.strip().lower()
+        if word in ("", "off", "none", "false"):
+            return None
+        if word in ("on", "true", "birth"):
+            return 0.0
+    heading = float(course)
+    if not math.isfinite(heading):
+        raise ValueError(f"a course is a heading in radians, not {course}")
+    return float(math.atan2(math.sin(heading), math.cos(heading)))
 
 
 def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window: Any = PROGRESS_WINDOW,
                 high_water: Any = HIGH_WATER, old_ground: Any = OLD_GROUND, pay_per_metre: Any = PROGRESS_PAY,
-                backward_pay: Any = BACKWARD_PAY) -> dict[str, Any]:
-    """The law's seven settings, typed and checked; a ValueError names what is wrong."""
+                backward_pay: Any = BACKWARD_PAY, course: Any = COURSE) -> dict[str, Any]:
+    """The law's eight settings, typed and checked; a ValueError names what is wrong."""
     high_water = bool(high_water)
     if not 0.0 <= float(old_ground) <= 1.0:
         raise ValueError(f"old ground is a share of the pay, 0 to 1, not {old_ground}")
@@ -109,12 +135,15 @@ def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window:
         raise ValueError(f"window must be at least 1 moment, not {window}")
     return {"stance_pay": float(stance_pay), "yaw_pay": float(yaw_pay), "window": int(window),
             "high_water": high_water, "old_ground": float(old_ground),
-            "pay_per_metre": float(pay_per_metre), "backward_pay": float(backward_pay)}
+            "pay_per_metre": float(pay_per_metre), "backward_pay": float(backward_pay),
+            "course": checked_course(course)}
 
 
 def law_text(law: dict[str, Any]) -> str:
     """The law in the page's words: ``progress`` is the plain law."""
     parts = [f"window {law['window']}" if law["window"] > 1 else "progress"]
+    if law.get("course") is not None:
+        parts.append(f"course {law['course']:.2f} rad")
     if law["pay_per_metre"] != PROGRESS_PAY:
         parts.append(f"{law['pay_per_metre']:g}/m")
     if law["backward_pay"]:
@@ -150,11 +179,13 @@ class Life:
         motors: str = DEFAULT_MOTORS,
         backward_pay: float = BACKWARD_PAY,
         old_ground: float = OLD_GROUND,
+        course: float | bool | None = COURSE,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self._take_law(checked_law(stance_pay=stance_pay, yaw_pay=yaw_pay, window=window, high_water=high_water,
-                                   old_ground=old_ground, pay_per_metre=pay_per_metre, backward_pay=backward_pay))
-        self.mark = 0.0                         # the farthest distance_forward reached: the high-water mark
+                                   old_ground=old_ground, pay_per_metre=pay_per_metre, backward_pay=backward_pay,
+                                   course=course))
+        self.mark = 0.0                         # the farthest paid distance reached: the high-water mark
         self.law_changes: list[dict[str, Any]] = []   # every live change of the law, moment and law (a schedule)
         self.seed = int(seed)
         self.genes = genes
@@ -162,6 +193,7 @@ class Life:
         self.senses = senses
         self.runs = Path(runs)
         self.pace = float(pace)                 # moments per second; 0 = as fast as possible
+        self.rate = 0.0                         # moments a second the loop actually makes, smoothed
         if motors not in MOTORS:
             raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
         self.motors = str(motors)               # the body's motor model, the life's own; a saved life keeps its own
@@ -172,6 +204,7 @@ class Life:
         self.reward: float | None = None        # the last executed command's outcome, not yet delivered
         self.moments = 0
         self.distance_forward = 0.0
+        self.distance_course = 0.0              # metres along the course (along the birth heading, 0, without one)
         self.turned = 0.0                       # radians turned over the life, unsigned
         self.distance_net_start = (0.0, 0.0)
         self.recentres = 0
@@ -198,29 +231,44 @@ class Life:
         self.yaw_pay = law["yaw_pay"]           # 0 switches the course hint off
         self.pay_per_metre = law["pay_per_metre"]   # the progress term's gain; the cap stays
         self.backward_pay = law["backward_pay"]     # 0 leaves backward free
+        self.course = law["course"]             # None pays along the body's own heading, a number along this one
         self.window = law["window"]
         kept = list(getattr(self, "_progress", []))[-self.window:]
         self._progress: deque[float] = deque(kept, maxlen=self.window)   # the last window moments' progress
 
     def law(self) -> dict[str, Any]:
-        """The reward law this life is paid under, the seven settings the flags set."""
+        """The reward law this life is paid under, the eight settings the flags set."""
         return {"stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay, "window": self.window,
                 "high_water": self.high_water, "old_ground": self.old_ground,
-                "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay}
+                "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay, "course": self.course}
+
+    def _paid_distance(self) -> float:
+        """The distance the progress term is measured on: along the course under the course law,
+        else along the body's own heading."""
+        return self.distance_course if self.course is not None else self.distance_forward
 
     def set_law(self, changes: dict[str, Any]) -> dict[str, Any]:
         """Change the law under which this life is paid, from the next moment on. The outcome
         already earned is delivered as it was earned. A life whose law changes is a schedule,
         a different model from a life under one law: every change is noted, counted, shown
-        and saved with the life, so that nobody reads it as a life under one law."""
+        and saved with the life, so that nobody reads it as a life under one law.
+
+        A course of ``true`` set live is the heading the body holds now: keep going this way.
+        A course that is switched on or changed starts the distance along it, and the high-water
+        mark on it, at zero; switched off, the mark stands where the body stands."""
         changes = dict(changes or {})
         unknown = sorted(set(changes) - set(LAW_KEYS))
         if unknown:
             raise ValueError(f"not a setting of the law: {', '.join(unknown)} (the law is {', '.join(LAW_KEYS)})")
         with self.lock:
+            if changes.get("course") is True:                    # keep going this way
+                changes["course"] = self.body.heading if self.course is None else self.course
             law = checked_law(**{**self.law(), **changes})
             if law == self.law():
                 return {"law": law, "changed": False}
+            if law["course"] != self.course:
+                self.distance_course = 0.0
+                self.mark = 0.0 if law["course"] is not None else self.distance_forward
             self._take_law(law)
             self.law_changes.append({"moment": self.moments, "law": law})
             self.notes.append(f"law changed at moment {self.moments}: {law_text(law)} (change {len(self.law_changes)}: this life is a schedule)")
@@ -234,18 +282,24 @@ class Life:
             observation = self.senses.observe(self.body)
             reading = self.policy.moment(observation, self.reward)
             self.reward = None
-            before = (self.body.x, self.body.y)
             outcome = self.body.step(reading["commands"])
             self.moments += 1
             self.distance_forward += outcome["progress"]
+            # the moment's motion along one fixed heading of the world: the course, or the birth
+            # heading without one, which every reading has as its line; the course law pays it
+            dx, dy = outcome["moved"]
+            heading = self.course if self.course is not None else 0.0
+            along = dx * math.cos(heading) + dy * math.sin(heading)
+            self.distance_course += along
+            advance = along if self.course is not None else outcome["progress"]
             if self.high_water:
                 # new ground only: a step back and the same step forward again earn nothing,
                 # unless the mark leaks, when the rest of the progress is paid at the old-ground share
-                new = max(0.0, self.distance_forward - self.mark)
-                gained = new + self.old_ground * (outcome["progress"] - new)
-                self.mark = max(self.mark, self.distance_forward)
+                new = max(0.0, self._paid_distance() - self.mark)
+                gained = new + self.old_ground * (advance - new)
+                self.mark = max(self.mark, self._paid_distance())
             else:
-                gained = outcome["progress"]
+                gained = advance
             self._progress.append(gained)
             paid = sum(self._progress) / self.window    # short of a full window the missing moments count as zero
             self.reward = pay(paid, outcome["stance"], self.stance_pay,
@@ -255,7 +309,7 @@ class Life:
                 self.recentres += 1
                 self.distance_net_start = (0.0, 0.0)
             self._block.append({**reading, "progress": outcome["progress"], "stance": outcome["stance"],
-                                "turn": outcome["turn"], "reward": self.reward})
+                                "turn": outcome["turn"], "reward": self.reward, "course": along})
             if len(self._block) >= BLOCK:
                 self._close_block()
             self.latest = self.snapshot(reading)
@@ -271,6 +325,7 @@ class Life:
         self.blocks.append({
             "moment": self.moments,
             "forward_m": round(sum(r["progress"] for r in rows), 4),
+            "course_m": round(sum(r["course"] for r in rows), 4),
             "reward_per_moment": round(sum(r["reward"] for r in rows) / n, 4),
             "aroused_share": round(sum(1 for r in rows if r["aroused"]) / n, 3),
             "sweeps_per_moment": round(sum(r["sweeps"] for r in rows) / n, 2),
@@ -290,6 +345,7 @@ class Life:
             "speed": round(self.body.vx, 4),
             "omega": round(self.body.omega, 4),
             "distance_forward": round(self.distance_forward, 4),
+            "distance_course": round(self.distance_course, 4),
             "mark": round(self.mark, 4),
             "turned": round(self.turned, 3),
             "distance_net": round(float(np.hypot(self.body.x, self.body.y)), 4),
@@ -311,6 +367,7 @@ class Life:
             "last_error": getattr(self.policy, "last_error", None),
             "paused": self.paused,
             "pace": self.pace,
+            "rate": round(self.rate, 1),
             "blocks": list(self.blocks)[-12:],
             "last_save_at": self.last_save_at,
             "notes": self.notes[-5:],
@@ -332,13 +389,18 @@ class Life:
             self._thread = None
 
     def _run(self) -> None:
-        next_at = time.monotonic()
+        next_at = last = time.monotonic()
         while self.running:
             if self.paused:
                 time.sleep(0.05)
-                next_at = time.monotonic()
+                next_at = last = time.monotonic()
                 continue
             self.tick()
+            now = time.monotonic()
+            if now > last:
+                made = 1.0 / (now - last)
+                self.rate = made if self.rate == 0.0 else 0.9 * self.rate + 0.1 * made
+            last = now
             if self.pace > 0:
                 next_at += 1.0 / self.pace
                 delay = next_at - time.monotonic()
@@ -448,7 +510,7 @@ class Life:
                 "format": FORMAT,
                 "cadence": CADENCE_VERSION,
                 "seed": self.seed,
-                "senses": {"per": self.senses.per, "setpoints": self.senses.setpoints},
+                "senses": self.senses.options(),
                 "genes": self.genes or {},
                 # under a control, the brain's last outcome already sits in its owed
                 "reward": self.reward if self.policy is brain else None,
@@ -456,6 +518,7 @@ class Life:
                 "moments": self.moments,
                 "refusals": brain.refusals,
                 "distance_forward": self.distance_forward,
+                "distance_course": self.distance_course,
                 "mark": self.mark,
                 "law": self.law(),
                 "law_changes": list(self.law_changes),
@@ -488,9 +551,11 @@ class Life:
                 if "genes" in state:
                     self.genes = dict(state["genes"]) or None    # the overrides the saved brain was composed with
                 if "senses" in state:
-                    saved_senses = Senses(per=int(state["senses"]["per"]), setpoints=bool(state["senses"]["setpoints"]))
-                    if (saved_senses.per, saved_senses.setpoints) != (self.senses.per, self.senses.setpoints):
+                    saved_senses = Senses(per=int(state["senses"]["per"]), setpoints=bool(state["senses"]["setpoints"]),
+                                          compass=bool(state["senses"].get("compass", False)))
+                    if saved_senses.options() != self.senses.options():
                         self.notes.append(f"saved with {saved_senses.inputs} inputs" + (", setpoints sensed" if saved_senses.setpoints else "")
+                                          + (", a compass" if saved_senses.compass else "")
                                           + f", asked for {self.senses.inputs}: the saved life keeps its own")
                         self.senses = saved_senses
             where = backend_of(self.backend)
@@ -503,6 +568,7 @@ class Life:
                 brain.refusals = int(state.get("refusals", 0))
                 self.moments = int(state["moments"])
                 self.distance_forward = float(state["distance_forward"])
+                self.distance_course = float(state.get("distance_course", 0.0))
                 # a life saved before the mark existed starts it where the body stands: no back pay
                 self.mark = float(state.get("mark", self.distance_forward))
                 if "law" in state:
@@ -544,13 +610,14 @@ class Life:
         continuing life, taken only on the page's Reset after the person confirmed it.
 
         ``birth`` names the newborn: ``seed``, ``genes`` (overrides, a dict or the nursery's
-        ``name=value`` words in one string), ``motors`` and ``setpoints``; what it leaves out
-        stays as the life had it. Genes are composed once, at birth, which is why they are
-        set here and nowhere else. The law is the life's and stays as it is."""
+        ``name=value`` words in one string), ``motors``, ``setpoints`` and ``compass``; what it
+        leaves out stays as the life had it. Genes are composed once, at birth, which is why
+        they are set here and nowhere else. The law is the life's and stays as it is; under
+        the course law the distance along the course and the mark start at zero."""
         birth = dict(birth or {})
-        unknown = sorted(set(birth) - {"seed", "genes", "motors", "setpoints"})
+        unknown = sorted(set(birth) - {"seed", "genes", "motors", "setpoints", "compass"})
         if unknown:
-            raise ValueError(f"a birth names seed, genes, motors and setpoints, not {', '.join(unknown)}")
+            raise ValueError(f"a birth names seed, genes, motors, setpoints and compass, not {', '.join(unknown)}")
         seed = int(birth.get("seed", self.seed))
         genes = birth.get("genes", self.genes)
         if isinstance(genes, str):
@@ -561,9 +628,11 @@ class Life:
         if motors not in MOTORS:
             raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
         setpoints = bool(birth.get("setpoints", self.senses.setpoints))
+        compass = bool(birth.get("compass", self.senses.compass))
         if setpoints and motors != "target":
             raise ValueError("the setpoint senses need target motors")
-        senses = self.senses if setpoints == self.senses.setpoints else Senses(per=self.senses.per, setpoints=setpoints)
+        senses = self.senses if (setpoints, compass) == (self.senses.setpoints, self.senses.compass) \
+            else Senses(per=self.senses.per, setpoints=setpoints, compass=compass)
         newborn = make_policy("brain", seed, None, genes, self.backend, inputs=senses.inputs)   # composed before the old life ends
         with self.lock:
             was = self.moments
@@ -577,6 +646,7 @@ class Life:
             self.reward = None
             self.moments = 0
             self.distance_forward = 0.0
+            self.distance_course = 0.0
             self.mark = 0.0
             self.turned = 0.0
             self.distance_net_start = (0.0, 0.0)
@@ -590,11 +660,11 @@ class Life:
             self.last_save_at = None
             self.loaded_from = None
             born = f"seed {self.seed}, {self.motors} motors" + (", setpoints sensed" if setpoints else "") \
-                + (f", genes {gene_words(genes)}" if genes else ", founder genes")
+                + (", a compass" if compass else "") + (f", genes {gene_words(genes)}" if genes else ", founder genes")
             self.notes = [f"reset after {was} moments: a newborn brain of {born}"]
             self.latest = self.snapshot(None)
         return {"reset": True, "moments_before": was, "seed": self.seed, "genes": genes or {}, "motors": self.motors,
-                "setpoints": setpoints}
+                "setpoints": setpoints, "compass": compass}
 
     def _maybe_autosave(self) -> None:
         if self.autosave_minutes <= 0 or not isinstance(self.policy, SpiderBrain):
@@ -612,6 +682,7 @@ class Life:
             "motors": self.motors,
             "inputs": self.senses.inputs,
             "setpoints": self.senses.setpoints,
+            "compass": self.senses.compass,
             "input_names": self.senses.input_names(),
             "joints": JOINTS,
             "legs": LEGS,
