@@ -22,6 +22,13 @@ front or behind stops against it (``separate``). A foot that is lifted pushes no
 a planted foot that does not move anchors the body; a closed joint cycle with the same planted
 set integrates to zero displacement. Moving forward therefore needs lifting, swinging and
 re-planting legs in a pattern: a gait, which is the brain's to find.
+
+The world can carry a current (``drift``, metres a second, 0 by default): every moment the
+body loses that much ground backward along its own heading, planted or not, on top of what
+its feet did. It is the world's, a problem and not a hint: the reward is still the body's
+motion, which now includes the ground lost, so standing still and swaying go backward and only
+a walk faster than the current nets ground. The nursery's and the server's ``--drift`` set it,
+the page switches it live, and every reading made under it names it (README, "The drift").
 """
 
 from __future__ import annotations
@@ -151,11 +158,14 @@ class Spider:
     moments: int = 0
     recentres: int = 0
     motors: str = DEFAULT_MOTORS        # the motor model, see the module docstring
+    drift: float = 0.0                  # the world's current, m/s backward along the heading, see the docstring
     targets: np.ndarray | None = None   # the servos' setpoints under target motors; unused under rate
 
     def __post_init__(self) -> None:
         if self.motors not in MOTORS:
             raise ValueError(f"motors must be one of {MOTORS}, not {self.motors!r}")
+        if not math.isfinite(self.drift) or self.drift < 0:
+            raise ValueError(f"the drift is a speed backward, 0 or more, not {self.drift}")
         if self.targets is None:
             self.targets = self.joints.copy()
         if self.feet_before is None or self.planted_before is None:
@@ -186,7 +196,8 @@ class Spider:
     def step(self, commands) -> dict:
         """Apply sixteen commands in ``{0: decrease, 1: hold, 2: increase}`` (joint order
         hip0, knee0, hip1, knee1, ...), move the body by what its planted feet did, and
-        return ``progress`` (metres along the heading held at the start of the moment),
+        return ``progress`` (metres along the heading held at the start of the moment, the
+        ground lost to the drift taken off),
         ``moved`` (the same motion as a world displacement, x and y, which a recentre does not
         touch), ``turn`` (radians the heading changed this moment), ``stance`` (feet planted
         at both moments) and ``recentred``."""
@@ -229,9 +240,9 @@ class Spider:
             self.omega *= decay
 
         heading = self.heading
-        progress = self.vx * DT
+        progress = (self.vx - self.drift) * DT     # the current takes its ground whatever the feet did
         turn = self.omega * DT
-        world = rotation(heading) @ np.array([self.vx, self.vy]) * DT
+        world = rotation(heading) @ np.array([self.vx - self.drift, self.vy]) * DT
         self.x += float(world[0])
         self.y += float(world[1])
         self.heading = math.atan2(math.sin(heading + self.omega * DT), math.cos(heading + self.omega * DT))
@@ -249,9 +260,9 @@ class Spider:
 
     def ground_velocity(self) -> tuple[float, float]:
         """The body's velocity over the ground in the world's frame, x and y in m/s: the
-        body-frame velocity turned by the heading. What a step adds to ``moved`` is this
-        times DT; a recentre does not touch it."""
-        world = rotation(self.heading) @ np.array([self.vx, self.vy])
+        body-frame velocity turned by the heading, the drift taken off. What a step adds to
+        ``moved`` is this times DT; a recentre does not touch it."""
+        world = rotation(self.heading) @ np.array([self.vx - self.drift, self.vy])
         return float(world[0]), float(world[1])
 
     def recentre(self) -> None:
@@ -272,6 +283,7 @@ class Spider:
             "planted_before": [bool(p) for p in self.planted_before],
             "moments": self.moments, "recentres": self.recentres,
             "motors": self.motors, "targets": self.targets.tolist(),
+            "drift": self.drift,
         }
 
     @classmethod
@@ -285,6 +297,7 @@ class Spider:
             moments=int(state["moments"]), recentres=int(state.get("recentres", 0)),
             motors=str(state.get("motors", "rate")),   # a world saved before the model existed is a rate body
             targets=None if state.get("targets") is None else np.array(state["targets"], dtype=float).reshape(LEGS, 2),
+            drift=float(state.get("drift", 0.0)),   # a world saved before the current existed had none
         )
 
     def pose(self) -> dict:

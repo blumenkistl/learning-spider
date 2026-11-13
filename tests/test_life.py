@@ -1,4 +1,5 @@
 import json
+import math
 
 import numpy as np
 import pytest
@@ -589,3 +590,91 @@ def test_a_slot_per_leg_is_a_birth_option_saved_with_the_life(tmp_path):
         life.control("reset", {"layout": "wheel"})
     with pytest.raises(ValueError):
         Life("brain", seed=0, pace=0.0, runs=tmp_path / "x", backend="cpu", layout="wheel")
+
+
+def test_the_drift_is_the_worlds_and_is_set_saved_and_counted_with_the_law(tmp_path):
+    from spider.body import DT
+
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0.0, runs=tmp_path, drift=-1)
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", drift=0.002)
+    assert life.describe()["reward"]["drift"] == 0.002 and life.body.drift == 0.002
+    from spider.life import law_text
+    assert law_text(life.law()) == "progress · drift 0.002 m/s"
+    for _ in range(3):
+        life.tick()
+    # switched off live: counted as a law change, the body follows from the next moment on
+    report = life.control("law", {"drift": 0})
+    assert report["changed"] and life.body.drift == 0.0 and len(life.law_changes) == 1
+    assert life.control("law", {"drift": 0})["changed"] is False
+    with pytest.raises(ValueError):
+        life.control("law", {"drift": -0.002})
+    report = life.control("law", {"drift": 0.005})
+    assert report["changed"] and life.body.drift == 0.005 and len(life.law_changes) == 2
+    # saved and loaded with the life, whatever the flags say; the loaded world runs under it
+    for _ in range(3):
+        life.tick()
+    life.save()
+    again = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu")       # still ground asked for
+    assert again.load()["custody"] == "kept"
+    assert again.drift == 0.005 and again.body.drift == 0.005 and again.law() == life.law()
+    assert any("keeps its own" in note and "drift 0.005" in note for note in again.notes)
+    for _ in range(4):
+        assert again.tick()["pose"] == life.tick()["pose"]
+    # on a current a standing body loses ground: the random control and a held body go backward
+    held = Life("random", seed=0, pace=0.0, runs=tmp_path, drift=0.01)
+    held.policy.moment = lambda observation, reward: {"commands": [1] * JOINTS, "answer": [1] * JOINTS, "aroused": False,
+                                                       "sweeps": 0, "learning_sweeps": 0, "refused": False}
+    for _ in range(10):
+        held.tick()
+    assert held.distance_forward == pytest.approx(-10 * 0.01 * DT)
+    assert held.reward == 0.0                                       # backward is free under the plain law
+    # a reset body takes the life's drift
+    life.control("reset", {"seed": 1})
+    assert life.body.drift == 0.005 and life.drift == 0.005
+
+
+def test_the_displacement_is_from_the_birth_point_and_survives_recentres_and_saves(tmp_path):
+    life = Life("random", seed=0, pace=0, runs=tmp_path)
+    for _ in range(50):
+        life.tick()
+    walked = list(life.displacement)
+    assert life.displacement_m() == pytest.approx(math.hypot(*walked))
+    assert life.latest["displacement_m"] == pytest.approx(life.displacement_m(), abs=1e-4)
+    # the body at the arena's edge: the next moment recentres it, the displacement keeps counting
+    life.body.x, life.body.y = 5.0, 0.3        # past the edge whatever the moment moves
+    before = life.displacement_m()
+    life.tick()
+    assert life.recentres == 1 and life.body.x == 0.0 and life.body.y == 0.0
+    assert life.displacement_m() != pytest.approx(0.0) and abs(life.displacement_m() - before) < 0.01
+    # a recentre by hand neither
+    life.body.x = 1.0
+    life.control("recentre")
+    assert life.recentres == 2 and life.displacement_m() == pytest.approx(life.displacement_m())
+    # a straight walk's displacement is its forward metres; a circle's is not
+    straight = Life("random", seed=0, pace=0, runs=tmp_path)
+    straight.body.vx = 0.5
+    for _ in range(100):
+        straight.body.omega = 0.0
+        straight.tick()
+    assert straight.displacement_m() == pytest.approx(straight.distance_forward, abs=1e-3)
+    # saved and loaded with the life; reset starts it at zero
+    brain = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    for _ in range(20):
+        brain.tick()
+    brain.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    again.load()
+    assert again.displacement == pytest.approx(brain.displacement) and again.displacement_m() > 0.0
+    again.control("reset")
+    assert again.displacement == [0.0, 0.0] and again.displacement_m() == 0.0
+    # a save from before the displacement existed starts it where the body stands
+    brain.save()
+    state = json.loads(brain.sidecar.read_text())
+    del state["displacement"]
+    state["recentres"] = 1
+    brain.sidecar.write_text(json.dumps(state))
+    older = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    older.load()
+    assert older.displacement == pytest.approx([brain.body.x, brain.body.y])
+    assert any("without a displacement" in n for n in older.notes)

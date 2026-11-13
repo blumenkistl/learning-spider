@@ -221,6 +221,8 @@ function describedBy(d) {
     const field = $('law-' + k);
     if (field.type === 'checkbox') field.checked = r[k] !== null && r[k] !== undefined && r[k] !== false; else field.value = r[k];
   }
+  $('drift').textContent = r.drift ? `drift ${r.drift} m/s` : 'drift off';
+  $('drift').classList.toggle('on', !!r.drift);
   $('birth-seed').value = d.seed;
   $('birth-motors').value = d.motors || 'target';
   $('birth-layout').value = d.layout || 'joint';
@@ -237,7 +239,8 @@ function describedBy(d) {
   $('birth-genes').value = geneWords(genes);
   $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
 }
-const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course'];
+const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift'];
+const DRIFT_DOSE = 0.002;   // m/s: what the drift button switches on when the settings field names no dose
 // The nursery's words for a brain's gene overrides: {gamma: 0.99, arousal: {need: 0}} → "gamma=0.99 arousal.need=0".
 function geneWords(genes, prefix = '') {
   return Object.entries(genes || {}).map(([k, v]) =>
@@ -261,6 +264,7 @@ function law(m) {
   if (r.high_water) parts.push(`high-water${r.old_ground ? ' leaking ' + r.old_ground : ''} · mark ${fmt(m.mark)} m`);
   if (r.stance_pay) parts.push(`stance ${r.stance_pay}`);
   if (r.yaw_pay) parts.push(`yaw ${r.yaw_pay}`);
+  if (r.drift) parts.push(`drift ${r.drift} m/s`);
   const changes = described.law_changes ? described.law_changes.length : 0;
   if (changes) parts.push(`a schedule: changed ${changes}×`);
   return parts.join(' · ');
@@ -318,7 +322,7 @@ function update(m) {
   mode.textContent = m.refused ? 'refused' : m.mode;
   mode.className = m.refused ? 'refused' : m.mode;
   $('forward').textContent = fmt(m.distance_forward) + ' m';
-  $('net').textContent = fmt(m.distance_net) + ' m' + (m.recentres ? ` · recentred ${m.recentres}×` : '');
+  $('net').textContent = fmt(m.displacement_m) + ' m' + (m.recentres ? ` · recentred ${m.recentres}×` : '');
   $('speed').textContent = fmt(m.speed) + ' m/s';
   $('reward').textContent = fmt(m.reward, 3) + (m.owed !== null && m.owed !== undefined ? ` (owed ${fmt(m.owed, 3)})` : '');
   lastState = m;
@@ -451,6 +455,12 @@ document.querySelectorAll('button[data-op]').forEach(b => b.addEventListener('cl
   if (result && b.dataset.op === 'reset') location.reload();
   else if (result && b.dataset.op === 'load') refreshDescription();
 }));
+// The drift button: off → on at the dose the settings field names (or the measured 0.002 m/s), on → off.
+$('drift').addEventListener('click', async () => {
+  const on = !!(described && described.reward && described.reward.drift);
+  const dose = Number($('law-drift').value) > 0 ? Number($('law-drift').value) : DRIFT_DOSE;
+  if (await control({ op: 'law', value: { drift: on ? 0 : dose } })) refreshDescription();
+});
 $('apply-law').addEventListener('click', async () => {
   const value = {};
   for (const k of LAW_KEYS) {

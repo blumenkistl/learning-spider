@@ -39,6 +39,9 @@ PROGRESS_CAP = 0.5      # the Robot Arena's cap, under the dopamine cap of 1.0
 BACKWARD_PAY = 0.0      # the share of the pay per metre charged for a metre backward: 0 leaves backward
                         # free (the founder, README "The reward"), 1 charges it as forward pays;
                         # --backward-pay / BACKWARD_PAY set it (README, "The backward pay")
+DRIFT = 0.0             # the world's current, metres a second the body loses backward along its heading
+                        # every moment, planted or not: the world's, not a term of the pay; 0 is still
+                        # ground (the founder); --drift / DRIFT set it (README, "The drift")
 STANCE_FLOOR = LEGS // 2   # feet the world wants on the ground through every moment: half of them
 STANCE_PAY = 0.0        # taken per foot short of the floor: a hint, shaping, not an outcome; off by default,
                         # 0.1 is the measured dose (README, "The stance term"); --stance-pay / STANCE_PAY set it
@@ -62,7 +65,11 @@ COURSE = None           # the course law: pay progress along this fixed heading 
 BLOCK = 100             # moments per statistics block
 BLOCKS_KEPT = 60
 FORMAT = "learning-spider/1"
-CADENCE_VERSION = "0.97.1"
+try:                    # the library the running brain is composed with; written into the sidecar, and a
+    from importlib.metadata import version as _version    # load of a life saved under another is noted
+    CADENCE_VERSION = _version("cadence-net")
+except Exception:       # pragma: no cover - an install that records no metadata
+    CADENCE_VERSION = "unknown"
 
 
 def pay(progress: float, stance: int = STANCE_FLOOR, stance_pay: float = STANCE_PAY,
@@ -97,7 +104,8 @@ def _replace(path: Path, write) -> None:
             os.unlink(tmp)
 
 
-LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay", "course")
+LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay", "course",
+            "drift")
 
 
 def checked_course(course: Any) -> float | None:
@@ -121,9 +129,13 @@ def checked_course(course: Any) -> float | None:
 
 def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window: Any = PROGRESS_WINDOW,
                 high_water: Any = HIGH_WATER, old_ground: Any = OLD_GROUND, pay_per_metre: Any = PROGRESS_PAY,
-                backward_pay: Any = BACKWARD_PAY, course: Any = COURSE) -> dict[str, Any]:
-    """The law's eight settings, typed and checked; a ValueError names what is wrong."""
+                backward_pay: Any = BACKWARD_PAY, course: Any = COURSE, drift: Any = DRIFT) -> dict[str, Any]:
+    """The law's nine settings, typed and checked; a ValueError names what is wrong. The
+    drift is the world's and not the pay's, but it is set, shown, saved and counted with the
+    law, so that a life whose world changed reads as the schedule it is."""
     high_water = bool(high_water)
+    if not math.isfinite(float(drift)) or float(drift) < 0:
+        raise ValueError(f"the drift is a speed backward in m/s, 0 or more, not {drift}")
     if not 0.0 <= float(old_ground) <= 1.0:
         raise ValueError(f"old ground is a share of the pay, 0 to 1, not {old_ground}")
     if float(old_ground) and not high_water:
@@ -137,7 +149,7 @@ def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window:
     return {"stance_pay": float(stance_pay), "yaw_pay": float(yaw_pay), "window": int(window),
             "high_water": high_water, "old_ground": float(old_ground),
             "pay_per_metre": float(pay_per_metre), "backward_pay": float(backward_pay),
-            "course": checked_course(course)}
+            "course": checked_course(course), "drift": float(drift)}
 
 
 def law_text(law: dict[str, Any]) -> str:
@@ -155,6 +167,8 @@ def law_text(law: dict[str, Any]) -> str:
         parts.append(f"stance {law['stance_pay']:g}")
     if law["yaw_pay"]:
         parts.append(f"yaw {law['yaw_pay']:g}")
+    if law.get("drift"):
+        parts.append(f"drift {law['drift']:g} m/s")
     return " · ".join(parts)
 
 
@@ -182,11 +196,12 @@ class Life:
         old_ground: float = OLD_GROUND,
         course: float | bool | None = COURSE,
         layout: str = DEFAULT_LAYOUT,
+        drift: float = DRIFT,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self._take_law(checked_law(stance_pay=stance_pay, yaw_pay=yaw_pay, window=window, high_water=high_water,
                                    old_ground=old_ground, pay_per_metre=pay_per_metre, backward_pay=backward_pay,
-                                   course=course))
+                                   course=course, drift=drift))
         self.mark = 0.0                         # the farthest paid distance reached: the high-water mark
         self.law_changes: list[dict[str, Any]] = []   # every live change of the law, moment and law (a schedule)
         self.seed = int(seed)
@@ -201,7 +216,7 @@ class Life:
         self.motors = str(motors)               # the body's motor model, the life's own; a saved life keeps its own
         if senses.setpoints and self.motors != "target":
             raise ValueError("the setpoint senses need target motors (--motors target)")
-        self.body = Spider(motors=self.motors)
+        self.body = Spider(motors=self.motors, drift=self.drift)
         if layout not in LAYOUTS:
             raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
         self.layout = str(layout)               # how the brain's answer is read, a slot per joint or per leg; the
@@ -213,7 +228,10 @@ class Life:
         self.distance_forward = 0.0
         self.distance_course = 0.0              # metres along the course (along the birth heading, 0, without one)
         self.turned = 0.0                       # radians turned over the life, unsigned
-        self.distance_net_start = (0.0, 0.0)
+        # the body's place in the world's frame from the point of birth, as the sum of every
+        # moment's motion over the ground: a recentre moves the body, not this (the body's x, y
+        # are reset at the arena's edge); its length is the honest answer to "how far did it get"
+        self.displacement = [0.0, 0.0]
         self.recentres = 0
         self.switches = 0
         self.blocks: deque[dict[str, Any]] = deque(maxlen=BLOCKS_KEPT)
@@ -239,15 +257,20 @@ class Life:
         self.pay_per_metre = law["pay_per_metre"]   # the progress term's gain; the cap stays
         self.backward_pay = law["backward_pay"]     # 0 leaves backward free
         self.course = law["course"]             # None pays along the body's own heading, a number along this one
+        self.drift = law["drift"]               # the world's current, which the body applies each moment
+        if hasattr(self, "body"):
+            self.body.drift = self.drift
         self.window = law["window"]
         kept = list(getattr(self, "_progress", []))[-self.window:]
         self._progress: deque[float] = deque(kept, maxlen=self.window)   # the last window moments' progress
 
     def law(self) -> dict[str, Any]:
-        """The reward law this life is paid under, the eight settings the flags set."""
+        """The reward law this life is paid under, the eight settings the flags set, and the
+        world's drift beside them."""
         return {"stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay, "window": self.window,
                 "high_water": self.high_water, "old_ground": self.old_ground,
-                "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay, "course": self.course}
+                "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay, "course": self.course,
+                "drift": self.drift}
 
     def _paid_distance(self) -> float:
         """The distance the progress term is measured on: along the course under the course law,
@@ -298,6 +321,8 @@ class Life:
             heading = self.course if self.course is not None else 0.0
             along = dx * math.cos(heading) + dy * math.sin(heading)
             self.distance_course += along
+            self.displacement[0] += dx
+            self.displacement[1] += dy
             advance = along if self.course is not None else outcome["progress"]
             if self.high_water:
                 # new ground only: a step back and the same step forward again earn nothing,
@@ -314,7 +339,6 @@ class Life:
             self.turned += abs(outcome["turn"])
             if outcome["recentred"]:
                 self.recentres += 1
-                self.distance_net_start = (0.0, 0.0)
             self._block.append({**reading, "progress": outcome["progress"], "stance": outcome["stance"],
                                 "turn": outcome["turn"], "reward": self.reward, "course": along})
             if len(self._block) >= BLOCK:
@@ -322,6 +346,10 @@ class Life:
             self.latest = self.snapshot(reading)
             self._maybe_autosave()
             return self.latest
+
+    def displacement_m(self) -> float:
+        """Metres from the point of birth in a straight line, whatever the way there."""
+        return float(math.hypot(*self.displacement))
 
     def _close_block(self) -> None:
         rows = self._block
@@ -341,6 +369,7 @@ class Life:
             "ms_per_moment": round(sum(r["ms"] for r in rows) / n, 2),
             "mean_stance": round(sum(r["stance"] for r in rows) / n, 2),
             "turned_rad": round(sum(abs(r["turn"]) for r in rows), 4),
+            "displacement_m": round(self.displacement_m(), 4),      # from the birth point, at the block's end
             "policy": rows[-1]["policy"],
         })
 
@@ -355,7 +384,7 @@ class Life:
             "distance_course": round(self.distance_course, 4),
             "mark": round(self.mark, 4),
             "turned": round(self.turned, 3),
-            "distance_net": round(float(np.hypot(self.body.x, self.body.y)), 4),
+            "displacement_m": round(self.displacement_m(), 4),
             "recentres": self.recentres,
             "reward": None if self.reward is None else round(self.reward, 4),
             "owed": None if getattr(self.policy, "owed", None) is None else round(float(self.policy.owed), 4),
@@ -533,6 +562,7 @@ class Life:
                 "law": self.law(),
                 "law_changes": list(self.law_changes),
                 "turned": self.turned,
+                "displacement": list(self.displacement),
                 "recentres": self.recentres,
                 "world": self.body.state_dict(),
                 "progress_window": list(self._progress),
@@ -597,6 +627,16 @@ class Life:
                 self.turned = float(state.get("turned", 0.0))
                 self.recentres = int(state.get("recentres", 0))
                 self.body = Spider.restore(state["world"])
+                # a life saved before the displacement existed starts it where the body stands: what
+                # it walked before its recentres is lost, and the note says so
+                if "displacement" in state:
+                    self.displacement = [float(v) for v in state["displacement"]]
+                else:
+                    self.displacement = [float(self.body.x), float(self.body.y)]
+                    if self.recentres:
+                        self.notes.append(f"saved without a displacement after {self.recentres} recentres: "
+                                          "it starts where the body stands")
+                self.body.drift = self.drift    # the law's, which the sidecar's law set above
                 if self.body.motors != self.motors:
                     self.notes.append(f"saved with {self.body.motors} motors, asked for {self.motors}: the saved life keeps its own")
                     self.motors = self.body.motors
@@ -611,7 +651,7 @@ class Life:
                 # the brain's pending command is known, its outcome is not: it reads as an
                 # observed zero at the next moment, which is a break in custody, reported
                 self.reward = None
-                self.body = Spider(motors=self.motors)
+                self.body = Spider(motors=self.motors, drift=self.drift)
                 custody = "broken: no sidecar, the pending outcome is lost"
                 self.notes.append(custody)
             self._block = []
@@ -662,14 +702,14 @@ class Life:
             self.seed, self.genes, self.motors, self.senses, self.layout = seed, genes, motors, senses, layout
             self.policy = newborn
             self._brain = None
-            self.body = Spider(motors=self.motors)
+            self.body = Spider(motors=self.motors, drift=self.drift)
             self.reward = None
             self.moments = 0
             self.distance_forward = 0.0
             self.distance_course = 0.0
             self.mark = 0.0
             self.turned = 0.0
-            self.distance_net_start = (0.0, 0.0)
+            self.displacement = [0.0, 0.0]
             self.recentres = 0
             self.switches = 0
             self.blocks.clear()

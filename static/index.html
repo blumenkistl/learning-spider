@@ -18,7 +18,7 @@
       <div title="moments lived by this brain: one moment is 50 ms of the body's clock, one answer of the brain, one outcome of the world"><span class="k">moment</span><span class="v" id="moments">0</span></div>
       <div title="the brain's mode this moment: aroused (it learns), routine (greedy, learning nothing) or refused (no answer, the outcome stays owed)"><span class="k">mode</span><span class="v" id="mode">idle</span></div>
       <div title="distance travelled along the body's own heading, summed over the life: what the reward pays"><span class="k">forward</span><span class="v" id="forward">0.000 m</span></div>
-      <div title="straight-line distance from the world's origin, and how often the body was recentred"><span class="k">from origin</span><span class="v" id="net">0.000 m</span></div>
+      <div title="straight-line metres from the point of birth, whatever the way there: the sum of every moment's motion over the ground, which a recentre does not touch (the body is put back at the origin at the arena's edge, 5 m out, and how often is counted here). Forward metres pay a circle; this does not"><span class="k">from birth</span><span class="v" id="net">0.000 m</span></div>
       <div title="forward speed this moment; a full stroke is 0.2 m/s"><span class="k">speed</span><span class="v" id="speed">0.000 m/s</span></div>
       <div title="the outcome of the last command, delivered at the next moment; owed is an outcome not yet delivered (a refusal or a control keeps it)"><span class="k">reward</span><span class="v" id="reward">—</span></div>
       <div class="wide" title="the reward law this life is paid under: progress each moment, or the mean of a window of moments; the course law pays progress along one fixed heading of the world (shown with the metres along it); the high-water mark pays new ground only; stance and yaw are shaping terms"><span class="k">law</span><span class="v" id="law">—</span></div>
@@ -59,6 +59,10 @@
       <button data-op="pace" data-value="100">5×</button>
       <button data-op="pace" data-value="0">max</button>
     </div>
+    <div class="buttons">
+      <span class="k">world</span>
+      <button id="drift" title="the world's current: switch the drift on at the dose named under settings (0.002 m/s unless the field says otherwise) or off; a change counts on the law line, since a life whose world changed is a schedule">drift off</button>
+    </div>
     <details id="settings">
       <summary class="k">settings</summary>
       <div class="settings">
@@ -72,7 +76,8 @@
           <label title="under the high-water mark, the share of the plain pay given for progress on ground already reached: 0 is the mark alone, 1 the plain law, 0.2 to 0.5 the leaking marks measured (the slowest of the laws to lose a found crawl). Needs high-water on"><span>old ground</span><input id="law-old_ground" type="number" step="0.1" min="0" max="1"></label>
           <label title="reward per metre of progress, under the cap of 0.5 a moment: at 40 (the founder) a full stroke pays 0.4; 20, 10 and 5 were measured: 10 goes backward, 5 stands, no gait"><span>pay per metre</span><input id="law-pay_per_metre" type="number" step="1" min="1"></label>
           <label title="share of the pay per metre charged for a metre backward: 0 leaves backward free (the shipped law: a foot in the air pays exactly zero), 1 charges it in full (the first law; measured, it did not help)"><span>backward pay</span><input id="law-backward_pay" type="number" step="0.1" min="0" max="1"></label>
-          <button id="apply-law" title="apply the eight settings above from the next moment on; the same law is no change and is not counted">Apply law</button>
+          <label title="the world's current, not a term of the pay: metres a second the body loses backward along its own heading every moment, planted or not, so that standing still and swaying go backward and only a walk faster than the current nets ground. 0 is still ground (the founder); the drift button above switches it between 0 and this dose. Measured in the README's 'The drift'"><span>drift m/s</span><input id="law-drift" type="number" step="0.001" min="0"></label>
+          <button id="apply-law" title="apply the nine settings above from the next moment on; the same law is no change and is not counted">Apply law</button>
         </div>
         <div class="col">
           <p class="small" title="what Reset gives birth to. Genes are composed once, at birth, so they, the seed, the motor model and the senses are set here and take effect on Reset only; the law above is the life's and stays. The sidecar carries the birth, so the server continues it on the next start whatever its flags say">next birth, on Reset</p>

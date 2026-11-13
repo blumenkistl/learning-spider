@@ -15,6 +15,7 @@ sidecar is beside it.
 from __future__ import annotations
 
 import argparse
+import math
 import json
 import sys
 import time
@@ -24,13 +25,13 @@ from typing import Any
 from .body import DEFAULT_MOTORS, MOTORS
 from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
-from .life import (BACKWARD_PAY, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
+from .life import (BACKWARD_PAY, DRIFT, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
                    Life, checked_course)
 from .senses import PER, Senses
 
 
 HEAD = (f"{'moment':>7} {'forward_m':>9} {'r/moment':>8} {'aroused':>7} {'sweeps':>6} "
-        f"{'learn':>6} {'refused':>7} {'ms':>6} {'stance':>6} {'turned':>7} {'course_m':>8}")
+        f"{'learn':>6} {'refused':>7} {'ms':>6} {'stance':>6} {'turned':>7} {'course_m':>8} {'from_birth':>10}")
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
@@ -45,7 +46,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
                 yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water, old_ground=args.old_ground,
                 pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay,
-                course=args.course, layout=args.layout)
+                course=args.course, layout=args.layout, drift=args.drift)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -58,6 +59,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     mark = life.distance_forward
     course_mark = life.distance_course
     turned_mark = life.turned
+    place = list(life.displacement)          # where the run starts, for the run's own displacement
     if not args.quiet:
         print(HEAD, flush=True)
     for _ in range(args.moments):
@@ -75,6 +77,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "mean_stance": round(sum(sum(w["pose"]["planted"]) for w in window) / block, 2),
                 "turned_rad": round(life.turned - turned_mark, 3),
                 "course_m": round(life.distance_course - course_mark, 4),
+                "displacement_m": round(life.displacement_m(), 4),      # from the birth point, at the block's end
             }
             rows.append(row)
             mark = life.distance_forward
@@ -85,7 +88,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 print(f"{row['moment']:>7} {row['forward_m']:>9.3f} {row['reward_per_moment']:>8.4f} "
                       f"{row['aroused_share']:>7.2f} {row['sweeps_per_moment']:>6.1f} {row['learning_sweeps']:>6} "
                       f"{row['refused']:>7} {row['ms_per_moment']:>6.2f} {row['mean_stance']:>6.2f} "
-                      f"{row['turned_rad']:>7.2f} {row['course_m']:>8.3f}", flush=True)
+                      f"{row['turned_rad']:>7.2f} {row['course_m']:>8.3f} {row['displacement_m']:>10.3f}", flush=True)
     elapsed = time.perf_counter() - began
     half = len(rows) // 2
     summary: dict[str, Any] = {
@@ -95,6 +98,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "from_moment": started,
         "forward_m": round(sum(r["forward_m"] for r in rows), 4),
         "course_m": round(sum(r["course_m"] for r in rows), 4),
+        # straight-line metres: from the point of birth at the end, and over this run alone (the
+        # same on a newborn); a circle walked for forward metres shows here as nothing
+        "displacement_m": round(life.displacement_m(), 4),
+        "run_displacement_m": round(math.hypot(life.displacement[0] - place[0], life.displacement[1] - place[1]), 4),
         "first_half_m": round(sum(r["forward_m"] for r in rows[:half]), 4),
         "second_half_m": round(sum(r["forward_m"] for r in rows[half:]), 4),
         "refused": int(sum(r["refused"] for r in rows)),
@@ -152,6 +159,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=BACKWARD_PAY,
                         help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
+    parser.add_argument("--drift", type=float, default=DRIFT,
+                        help=f"the world's current: metres a second the body loses backward along its heading every "
+                             f"moment, planted or not (default {DRIFT}; 0 = still ground)")
     parser.add_argument("--layout", choices=LAYOUTS, default=DEFAULT_LAYOUT,
                         help=f"how a newborn brain's answer is read: a slot per joint (three answers) or per leg "
                              f"(nine, the pairs of its two joints' answers); a saved brain keeps its own (default {DEFAULT_LAYOUT})")

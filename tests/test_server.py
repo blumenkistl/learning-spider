@@ -35,6 +35,7 @@ async def test_state_and_describe(client):
     assert len(state["pose"]["legs"]) == 8 and len(state["pose"]["legs"][0]) == 6
     assert len(state["pose"]["planted"]) == 8
     assert state["policy"] == "random"
+    assert state["displacement_m"] >= 0.0 and "distance_net" not in state
     described = await (await client.get("/api/describe")).json()
     assert described["inputs"] == len(described["input_names"]) == 152
     assert described["brain"] is None and described["control"]["policy"] == "random"
@@ -102,6 +103,10 @@ def test_flags_mirror_the_nursery_and_the_environment_sets_defaults(tmp_path, mo
     monkeypatch.setenv("LAYOUT", "leg")
     assert arguments([]).layout == "leg"
     assert life_from(arguments(["--high-water", "--policy", "random", "--runs", str(tmp_path)])).policy.layout == "leg"
+    assert arguments([]).drift == 0.0 and arguments(["--drift", "0.002"]).drift == 0.002
+    monkeypatch.setenv("DRIFT", "0.005")
+    assert arguments([]).drift == 0.005
+    assert life_from(arguments(["--high-water", "--policy", "random", "--runs", str(tmp_path)])).body.drift == 0.005
 
 
 async def test_the_law_and_a_birth_are_controls(client):
@@ -111,6 +116,12 @@ async def test_the_law_and_a_birth_are_controls(client):
     assert described["reward"]["high_water"] is True and described["reward"]["stance_pay"] == 0.1
     assert len(described["law_changes"]) == 1
     r = await client.post("/api/control", json={"op": "law", "value": {"old_ground": 2}})
+    assert r.status == 400
+    r = await client.post("/api/control", json={"op": "law", "value": {"drift": 0.002}})
+    assert r.status == 200 and (await r.json())["law"]["drift"] == 0.002
+    described = await (await client.get("/api/describe")).json()
+    assert described["reward"]["drift"] == 0.002 and len(described["law_changes"]) == 2
+    r = await client.post("/api/control", json={"op": "law", "value": {"drift": -1}})
     assert r.status == 400
     r = await client.post("/api/control", json={"op": "law", "value": 3})
     assert r.status == 400

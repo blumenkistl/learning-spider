@@ -59,6 +59,12 @@ without a page, for measurement.
   The high-water mark (`--high-water`, `HIGH_WATER`; off by default) is not a hint: it is the
   same outcome counted once, progress beyond the farthest point reached, so a sway earns
   nothing. The mark belongs to the life and is saved and loaded with it.
+  The drift (`--drift`, `DRIFT`; off by default) is not a hint: it is the world's current, a
+  speed the body loses backward along its own heading every moment, planted or not, before the
+  outcome is measured. It supplies a problem, never an answer, but a life on a current is a
+  different world from a life on still ground, so the drift is set, shown, saved and counted
+  with the law (a change live is a law change; the page's `drift` button is one) and named in
+  every reading made under it.
 - **Every outcome is delivered exactly once.** `Life.reward` is the last executed command's
   outcome not yet delivered. A refusal keeps it in the policy's `owed`; a policy switch moves it
   to the brain's `owed`; a save writes it to the sidecar; a load delivers it. Keep the tests in
@@ -72,7 +78,7 @@ without a page, for measurement.
   turning it on is a gene to measure, not a default to flip.
 - **Readings are readings.** A block's forward metres, reward per moment, aroused share and
   sweeps are what the nursery measured on one machine with one seed each; they are not a claim
-  about the library. A found gait is reported as what it is. Change a founder gene only with a
+  about the library. A found gait is reported as what it is: forward metres are collected along the body's own heading and pay a circle, so a reading of a walk names the displacement from the birth point (`displacement_m`, the nursery's `from_birth`, the page's "from birth") beside them. Change a founder gene only with a
   nursery comparison against the previous value, random and frozen, at matched moments and
   seeds, written into the README's measurement section.
 - **Residuals are not energy.** `ms/moment` and sweep counts are costs of this implementation

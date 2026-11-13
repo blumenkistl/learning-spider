@@ -9,14 +9,14 @@ world around it. Whether it learns to walk is a measured question. The readings 
 controls do not, in two seeds of three, modestly; a reward hint keeps four feet on the ground
 at the cost of half that distance.
 
-Built with `cadence-net==0.97.1`.
+Built with `cadence-net==0.99.0` (0.97.1 until 2026-11-13; 0.98 and 0.99 change no default, and a brain acts, learns and saves to the bit as on 0.97.1).
 
 ## See it
 
 ```sh
 sudo apt install python3-venv python3-pip                 # once, on Debian or Ubuntu
 python3 -m venv .venv
-.venv/bin/python -m pip install "cadence-net[accel]==0.97.1"   # PyTorch with CUDA, several GB
+.venv/bin/python -m pip install "cadence-net[accel]==0.99.0"   # PyTorch with CUDA, several GB
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python server.py
 ```
@@ -59,9 +59,12 @@ shows the pace asked for and the moments a second the loop actually makes.
 
 Every reading, button and setting on the panel explains itself on mouse-over, with the measured dose where one exists. Under the buttons, a collapsed `settings` line opens two columns. **law, live** holds the
 reward's eight settings (the stance and yaw hints, the window, the high-water mark and its leak,
-the pay per metre, the backward charge and the course) and `Apply law` changes them from the next moment on;
+the pay per metre, the backward charge and the course) and, beside them, the world's drift (a
+current the body loses ground to; "The drift" below), and `Apply law` changes them from the next moment on;
 the outcome already earned is delivered as it was earned, and the same law is no change. A life
-whose law changed is not a life under one law: it is a schedule, and the page says so. Every
+whose law changed is not a life under one law: it is a schedule, and the page says so; the
+`drift` button under the pace switches the current on at the dose the field names (0.002 m/s
+when it names none) or off, and counts the same way. Every
 change is noted ("law changed at moment N: …, this life is a schedule"), counted on the law
 line ("a schedule: changed 2×"), reported by `/api/describe` as `law_changes` and saved with
 the life, so a continued life keeps the law it was last paid under, whatever flags the server
@@ -90,7 +93,8 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--stance-pay` (0), `--yaw-pay` (0), `--window` (1), `--high-water` (off), `--old-ground` (0),
 `--pay-per-metre` (40), `--backward-pay` (0) and `--course` (off), the two hints, the window, the high-water
 mark and its leak, the gain, the backward charge and the course
-described under [the reward](#the-reward-spiderlifepy), `--motors`
+described under [the reward](#the-reward-spiderlifepy), `--drift` (0) for the world's current,
+set and saved with the law, `--motors`
 (`target` since 2026-11-12, `rate` before) for a newborn's body, `--layout` (`joint`; `leg` reads
 a newborn brain's answer a leg at a time, [the brain](#the-brain-spiderbrainpy)), `--setpoints` (off) to sense the servos' setpoints too
 and `--compass` (off) to sense the heading, `--ground` (off) to sense the velocity over the
@@ -270,6 +274,18 @@ on the law line with the metres along it, saved and loaded with the life. The co
 the sense that heading can be read from. Its readings are under "The course" below; the default
 stays off.
 
+`--drift D` (`DRIFT` for the server, default 0) is not a setting of the pay but of the world:
+a current of D metres a second that the body loses backward along its own heading every
+moment, planted or not, on top of what its feet did (`drift` in `spider/body.py`). The
+reward is still the body's motion, which now includes the ground lost: under the plain law
+backward is free, so the current costs a standing or swaying body nothing in pay and takes
+its ground, and a stroke pays what it made less the current's share of the moment. It is the
+world supplying a problem, not a hint, but a life on a current is a different world from a
+life on still ground, so the drift is set, shown, saved and counted with the law (a change
+live is a law change, and the life a schedule) and named in every reading made under it. The
+measured dose is 0.002 m/s, 3 m of ground over 30,000 moments, below the speed of the lives
+that walked above; its readings are under "The drift" below; the default stays 0.
+
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
 is paying for a posture and a course, not for an outcome. Both ship switched off
 (`stance_pay = 0`, `yaw_pay = 0`), so the shipped law is progress only. The stance term was
@@ -354,12 +370,21 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass  # pay the line of the birth heading, sensed by a compass
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass --ground  # and the velocity over the ground sensed too
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --layout leg      # a slot per leg: the brain chooses a leg's pair of commands at once
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --drift 0.002     # on a current: the body loses 0.002 m/s backward, planted or not
 ```
 
 One line per block of 100 moments (forward metres, reward per moment, aroused share, sweeps
 and learning sweeps per moment, refusals, ms per moment, mean feet planted, radians turned,
-metres along the course or, without one, along the birth heading) and a JSON
-summary (`--json path` writes it).
+metres along the course or, without one, along the birth heading, and `from_birth`: the
+straight-line metres from the point of birth at the block's end) and a JSON
+summary (`--json path` writes it). The summary's `displacement_m` is that straight line at
+the end and `run_displacement_m` the straight line over this run alone (the same on a
+newborn). Forward metres are the sum of every moment's progress along the body's own heading,
+so a circle walked collects them; the displacement is the sum of every moment's motion over
+the ground, taken as one vector in the world's frame, so a circle collects nothing. It belongs
+to the life, is saved and loaded with it, and a recentre at the arena's edge (5 m out, where
+the body is put back at the origin) does not touch it. A life saved before 2026-11-13 has
+none; it starts where the body stands on the load.
 
 ### Readings
 
@@ -1648,12 +1673,68 @@ no row of it is worth seeds 3–5 before the joint rows above are. 3.7–3.9 ms 
 the two plain-law lives that ran with twelve others; the rest of the batch shared the
 machine with the previous batch's controls as well, and their costs are not a reading.
 
+**The drift.** The world's current (`--drift`; "The reward" above): 0.002 m/s backward along
+the body's own heading every moment, planted or not, 3 m of ground over 30,000 moments (0.5 m
+a window of 5000), below the speed of the lives that walked above; and 0.005 m/s, 7.5 m (1.25
+a window). Servos, gamma 0.99, seeds 0–2, 30,000 moments, without and with the entropy term
+at 0.1; random, frozen newborns and frozen copies at 3000 moments under the same current.
+Forward metres are net of the ground lost: what the feet made is the row plus 0.5 a window at
+0.002 and 1.25 at 0.005 (0.3 and 0.75 over 3000 moments):
+
+| 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
+| --- | --- | --- | --- |
+| servos, gamma 0.99, still ground (table above) | +1.689 (−0.01; 3.8 → 5.0; 0.00; 0.049) | +0.939 (+0.03; 3.1 → 3.9; 0.98; 0.025) | +0.674 (+0.08; 3.8 → 4.8; 0.99; 0.025) |
+| drift 0.002 | −1.185 (−0.45; 3.4 → 4.2; 1.00; 0.023) | −2.646 (−0.34; 2.6 → 4.8; 0.87; 0.028) | −2.393 (−0.40; 3.4 → 3.7; 0.98; 0.024) |
+| servos, gamma 0.99, entropy 0.1, still ground (table above) | +0.564 (+0.01; 3.3 → 3.0; 0.00; 0.070) | +5.218 (+0.63; 3.1 → 4.6; 0.46; 0.053) | +4.263 (+0.69; 4.9 → 4.9; 0.00; 0.052) |
+| drift 0.002, entropy 0.1 | +5.128 (+0.45; 4.4 → 4.7; 0.00; 0.041) | +0.079 (−0.49; 3.6 → 3.0; 0.00; 0.083) | +0.181 (−0.50; 3.7 → 4.0; 0.00; 0.053) |
+| drift 0.005 | −6.377 (−1.25; 3.6 → 3.0; 0.00; 0.068) | −7.005 (−1.40; 2.7 → 4.1; 1.00; 0.018) | −7.109 (−1.17; 3.7 → 4.1; 1.00; 0.019) |
+| random, drift 0.002, 3000 moments | −0.524 (2.8) | −0.331 (3.1) | −0.756 (3.1) |
+| frozen newborn, drift 0.002, 3000 moments | −0.406 (5.0) | −0.300 (2.0) | −0.265 (6.0) |
+| frozen copies of the drift 0.002 brains, 3000 moments | −0.145 (7.0) | −0.177 (5.0) | −0.146 (6.0) |
+| frozen copies of the drift 0.002, entropy brains, 3000 moments | −0.058 (5.0) | −0.181 (2.0) | −0.224 (3.0) |
+| frozen copies of the drift 0.005 brains, 3000 moments, drift 0.005 | −0.731 (8.0) | −0.601 (5.0) | −0.596 (6.0) |
+| drift 0.002, per 5000 moments | +1.03 −0.04 −0.36 −0.96 −0.40 −0.45 | −0.49 −0.54 −0.44 −0.36 −0.47 −0.34 | −0.31 −0.62 −0.31 −0.43 −0.32 −0.40 |
+| drift 0.002, entropy 0.1, per 5000 moments | +1.05 +1.78 +0.87 +0.54 +0.45 +0.45 | +0.40 +1.05 +0.11 −0.50 −0.50 −0.49 | +0.86 +0.93 −0.10 −0.50 −0.50 −0.50 |
+| drift 0.005, per 5000 moments | −0.12 −1.27 −1.25 −1.23 −1.27 −1.25 | −1.02 −1.07 −0.91 −1.30 −1.32 −1.40 | −1.39 −1.08 −1.17 −1.12 −1.19 −1.17 |
+
+**Reading:** the current takes ground, not income. Under the plain law backward is free, so a
+body carried backward pays nothing for it; only the forward moments pay, each 40·D·DT less
+than on still ground (0.004 at 0.002, 0.01 at 0.005), and a moment slower than the current
+pays nothing. The rows show it. Two of the entropy lives on the 0.002 current (seeds 1 and 2)
+walked +0.4 to +1.05 a window net for 10,000 moments (0.9 to 1.55 made) and then fell calm
+(11,400 and 13,400 moments) into a stand on three and four feet that loses exactly the
+window's drift, −0.50, the feet making nothing, at 0.083 and 0.053 a moment: more than the
+one walker earns, and what the same stands earn on still ground (0.070 and 0.052 in the row
+above). A stand on a current earns what it earns on still ground, so the current does not
+push a calm body to walk. Seed 0 with the entropy term is the one life that walks against the
+current: +5.13 net, 8.1 made, calm from 16,400 moments, and in each of its last two windows
++0.45 net, 0.95 made, 0.0038 m/s on 4.7 feet at 0.041 a moment, the first calm cycle above
+that nets ground against a current (the same seed stood still on still ground at +0.56; the
+current changes nothing the brain senses, only the pay of each moment, and that is a
+different life, not a dose). Without the entropy term the three lives stay aroused to the
+end (0.87–1.00) in sways, seed 0 after walking +1.03 net (1.53 made) in its first window;
+the feet made 1.8 / 0.35 / 0.6 m against the founder's 1.69 / 0.94 / 0.67 on still ground.
+At 0.005 the lives made 1.1 / 0.5 / 0.4 m of the 7.5 lost; seed 0 fell calm at 4400 into a
+three-footed sway that loses the full 1.25 a window at 0.068 a moment, the standing income
+again, and seeds 1 and 2 stayed aroused at 0.018–0.019. The controls: random made −0.22 /
+−0.03 / −0.46 m beyond the 0.3 m the current took; the frozen newborn loses the current and
+nothing else (seed 0's −0.406 is its −0.106 under target motors above less 0.300); the
+frozen copies make the hip sweep beyond the current, 0.12–0.24 m in 3000 moments at 0.002
+and 0.02–0.15 at 0.005. The drift stays off in the founder. For the current to bite, backward
+must cost: under the backward pay or the high-water mark a carried body earns nothing until
+it regains the ground, and that pairing is the next step, not a stronger current. 2.6–2.9
+ms a moment for the entropy lives, 4.0–4.2 for the aroused plain lives, twelve lives sharing
+the machine.
+
 What a next step would measure, each against the same controls and on the eight-legged body:
 the finer code with the stance term over a longer life, the one gene that moved the first
 block; the course with the compass, the ground sense and the entropy term at 0.1 on seeds
 3–5, the row whose seed 1 walked 7.9 m along its line, so that the row is a dose; and the
 course law with the backward pay at 1 or a window, so that the sway it leaves pays nothing
-along the line, with the same senses. The horizon past 0.99, the setpoints as senses, the
+along the line, with the same senses. The current at 0.002 with the backward pay at 1 or the
+high-water mark, so that a body carried backward earns nothing until it regains the ground,
+on the entropy row whose seed 0 walked 0.95 m a window against it and whose seeds 1 and 2
+stood and were carried at a stand's income. The horizon past 0.99, the setpoints as senses, the
 leaking mark, the recall memory, the temperature, the actor's hold and maturity, and the
 observation codes (fixed and learned) are measured above and change nothing after the first
 block, the codes losing it; the critic's rate at 20 held one seed's slow

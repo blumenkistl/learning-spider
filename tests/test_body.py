@@ -350,3 +350,39 @@ def test_the_motor_model_and_its_setpoints_survive_the_world_state():
     # a world saved before the model existed is a rate body
     old = Spider().state_dict(); del old["motors"]; del old["targets"]
     assert Spider.restore(old).motors == "rate"
+
+
+def test_the_drift_takes_ground_every_moment_planted_or_not():
+    from spider.body import DT
+
+    still = Spider()
+    current = Spider(drift=0.01)
+    for _ in range(5):
+        a = still.step(hold())
+        b = current.step(hold())
+        assert a["progress"] == 0.0                                   # a standing body on still ground stays
+        assert b["progress"] == pytest.approx(-0.01 * DT)             # on a current it loses ground backward
+        assert b["moved"][0] == pytest.approx(-0.01 * DT) and b["moved"][1] == pytest.approx(0.0)
+        assert b["turn"] == 0.0 and b["stance"] == a["stance"]
+    assert current.x == pytest.approx(-5 * 0.01 * DT) and still.x == 0.0
+    assert current.ground_velocity() == pytest.approx((-0.01, 0.0))
+    for _ in range(3):
+        current.step(command(knees=2))                                 # every foot lifted: the current still takes its ground
+    assert current.x == pytest.approx(-8 * 0.01 * DT)
+    # a stroke nets what the feet made minus the current, and the same stroke on still ground more
+    still, current = Spider(), Spider(drift=0.01)
+    a = sum(still.step(command(hips=0))["progress"] for _ in range(4))
+    b = sum(current.step(command(hips=0))["progress"] for _ in range(4))
+    assert a > 0 and b == pytest.approx(a - 4 * 0.01 * DT)
+    # the current turns with the body: backward along its own heading, whatever it faces
+    turned = Spider(drift=0.01, heading=math.pi / 2)
+    out = turned.step(hold())
+    assert out["progress"] == pytest.approx(-0.01 * DT)
+    assert out["moved"][0] == pytest.approx(0.0, abs=1e-12) and out["moved"][1] == pytest.approx(-0.01 * DT)
+    # it is part of the world's state, and a world saved before it existed has none
+    assert Spider.restore(current.state_dict()).drift == 0.01
+    old = current.state_dict()
+    del old["drift"]
+    assert Spider.restore(old).drift == 0.0
+    with pytest.raises(ValueError):
+        Spider(drift=-0.01)
