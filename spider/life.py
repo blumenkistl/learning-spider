@@ -62,6 +62,12 @@ COURSE = None           # the course law: pay progress along this fixed heading 
                         # line pays; None is off, the plain law. Not a hint: the same outcome, measured along one
                         # heading instead of a turning one. The brain reads the heading through the compass
                         # (Senses(compass=True)). --course / COURSE set it (README, "The course")
+STRICT = False          # the strict course: under a course, the progress term is the lesser of the moment's
+                        # motion along the course and along the body's own heading, so that only nose first
+                        # on the course pays in full: backward along the course is backward along the nose
+                        # (charged as --backward-pay says), nose first off the course pays little. Not a hint:
+                        # the same outcome measured twice, the lesser paid. --strict / STRICT set it; it needs
+                        # a course (README, "The strict course")
 BLOCK = 100             # moments per statistics block
 BLOCKS_KEPT = 60
 FORMAT = "learning-spider/1"
@@ -105,7 +111,7 @@ def _replace(path: Path, write) -> None:
 
 
 LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay", "course",
-            "drift")
+            "drift", "strict")
 
 
 def checked_course(course: Any) -> float | None:
@@ -129,8 +135,9 @@ def checked_course(course: Any) -> float | None:
 
 def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window: Any = PROGRESS_WINDOW,
                 high_water: Any = HIGH_WATER, old_ground: Any = OLD_GROUND, pay_per_metre: Any = PROGRESS_PAY,
-                backward_pay: Any = BACKWARD_PAY, course: Any = COURSE, drift: Any = DRIFT) -> dict[str, Any]:
-    """The law's nine settings, typed and checked; a ValueError names what is wrong. The
+                backward_pay: Any = BACKWARD_PAY, course: Any = COURSE, drift: Any = DRIFT,
+                strict: Any = STRICT) -> dict[str, Any]:
+    """The law's ten settings, typed and checked; a ValueError names what is wrong. The
     drift is the world's and not the pay's, but it is set, shown, saved and counted with the
     law, so that a life whose world changed reads as the schedule it is."""
     high_water = bool(high_water)
@@ -146,17 +153,21 @@ def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window:
         raise ValueError(f"backward pay is a share of the forward pay, 0 to 1, not {backward_pay}")
     if int(window) < 1:
         raise ValueError(f"window must be at least 1 moment, not {window}")
+    strict = bool(strict)
+    course = checked_course(course)
+    if strict and course is None:
+        raise ValueError("the strict course is paid under the course law only (--course)")
     return {"stance_pay": float(stance_pay), "yaw_pay": float(yaw_pay), "window": int(window),
             "high_water": high_water, "old_ground": float(old_ground),
             "pay_per_metre": float(pay_per_metre), "backward_pay": float(backward_pay),
-            "course": checked_course(course), "drift": float(drift)}
+            "course": course, "drift": float(drift), "strict": strict}
 
 
 def law_text(law: dict[str, Any]) -> str:
     """The law in the page's words: ``progress`` is the plain law."""
     parts = [f"window {law['window']}" if law["window"] > 1 else "progress"]
     if law.get("course") is not None:
-        parts.append(f"course {law['course']:.2f} rad")
+        parts.append(f"course {law['course']:.2f} rad" + (", strict" if law.get("strict") else ""))
     if law["pay_per_metre"] != PROGRESS_PAY:
         parts.append(f"{law['pay_per_metre']:g}/m")
     if law["backward_pay"]:
@@ -197,11 +208,12 @@ class Life:
         course: float | bool | None = COURSE,
         layout: str = DEFAULT_LAYOUT,
         drift: float = DRIFT,
+        strict: bool = STRICT,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self._take_law(checked_law(stance_pay=stance_pay, yaw_pay=yaw_pay, window=window, high_water=high_water,
                                    old_ground=old_ground, pay_per_metre=pay_per_metre, backward_pay=backward_pay,
-                                   course=course, drift=drift))
+                                   course=course, drift=drift, strict=strict))
         self.mark = 0.0                         # the farthest paid distance reached: the high-water mark
         self.law_changes: list[dict[str, Any]] = []   # every live change of the law, moment and law (a schedule)
         self.seed = int(seed)
@@ -258,6 +270,7 @@ class Life:
         self.backward_pay = law["backward_pay"]     # 0 leaves backward free
         self.course = law["course"]             # None pays along the body's own heading, a number along this one
         self.drift = law["drift"]               # the world's current, which the body applies each moment
+        self.strict = law["strict"]             # under a course: the lesser of along the course and along the nose
         if hasattr(self, "body"):
             self.body.drift = self.drift
         self.window = law["window"]
@@ -265,12 +278,12 @@ class Life:
         self._progress: deque[float] = deque(kept, maxlen=self.window)   # the last window moments' progress
 
     def law(self) -> dict[str, Any]:
-        """The reward law this life is paid under, the eight settings the flags set, and the
+        """The reward law this life is paid under, the nine settings the flags set, and the
         world's drift beside them."""
         return {"stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay, "window": self.window,
                 "high_water": self.high_water, "old_ground": self.old_ground,
                 "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay, "course": self.course,
-                "drift": self.drift}
+                "drift": self.drift, "strict": self.strict}
 
     def _paid_distance(self) -> float:
         """The distance the progress term is measured on: along the course under the course law,
@@ -293,6 +306,8 @@ class Life:
         with self.lock:
             if changes.get("course") is True:                    # keep going this way
                 changes["course"] = self.body.heading if self.course is None else self.course
+            if "course" in changes and changes["course"] is None:   # the course switched off takes the strict course with it
+                changes["strict"] = False
             law = checked_law(**{**self.law(), **changes})
             if law == self.law():
                 return {"law": law, "changed": False}
@@ -323,7 +338,12 @@ class Life:
             self.distance_course += along
             self.displacement[0] += dx
             self.displacement[1] += dy
-            advance = along if self.course is not None else outcome["progress"]
+            if self.course is None:
+                advance = outcome["progress"]
+            elif self.strict:                   # the lesser of the two measures: nose first on the course, or less
+                advance = min(along, outcome["progress"])
+            else:
+                advance = along
             if self.high_water:
                 # new ground only: a step back and the same step forward again earn nothing,
                 # unless the mark leaks, when the rest of the progress is paid at the old-ground share

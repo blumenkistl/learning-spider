@@ -21,6 +21,7 @@
       <div title="straight-line metres from the point of birth, whatever the way there: the sum of every moment's motion over the ground, which a recentre does not touch (the body is put back at the origin at the arena's edge, 5 m out, and how often is counted here). Forward metres pay a circle; this does not"><span class="k">from birth</span><span class="v" id="net">0.000 m</span></div>
       <div title="forward speed this moment; a full stroke is 0.2 m/s"><span class="k">speed</span><span class="v" id="speed">0.000 m/s</span></div>
       <div title="the outcome of the last command, delivered at the next moment; owed is an outcome not yet delivered (a refusal or a control keeps it)"><span class="k">reward</span><span class="v" id="reward">—</span></div>
+      <div class="wide" title="the speed as a bar: the moment's forward speed filled from the centre, blue forward and red backward, on a scale of a full stroke (0.2 m/s) each way; the tick is the mean speed of the last 100 moments (the block's forward metres over its 5 s)"><div class="speedbar"><div class="zero"></div><div id="speed-fill"></div><div id="speed-mean"></div></div></div>
       <div class="wide" title="the reward law this life is paid under: progress each moment, or the mean of a window of moments; the course law pays progress along one fixed heading of the world (shown with the metres along it); the high-water mark pays new ground only; stance and yaw are shaping terms"><span class="k">law</span><span class="v" id="law">—</span></div>
       <div class="wide" title="the body's motor model: rate (the founder: a command moves the joint for one moment) or target (position servos: a command sets a joint's setpoint to an end of its range, hold keeps it); then the brain's slot layout if per leg, and the senses beyond the founder's"><span class="k">motors</span><span class="v" id="motors">—</span></div>
       <div title="the arousal law: level is the arousal of the moment, want the need not met; above the threshold the brain is aroused and learns"><span class="k">level / want</span><span class="v" id="arousal">—</span></div>
@@ -71,13 +72,14 @@
           <label title="shaping, not an outcome: reward taken per foot short of four planted through the moment. 0 is off and the shipped law; 0.1 is the measured dose (obeyed; the body stands and walked farthest under it), 0.02 is ignored"><span>stance pay</span><input id="law-stance_pay" type="number" step="0.05" min="0"></label>
           <label title="shaping, not an outcome: reward taken per radian the heading turns in a moment. 0 is off and the shipped law; no measured dose (0.1, 1 and 5 a radian) straightened the course without stopping the walk"><span>yaw pay</span><input id="law-yaw_pay" type="number" step="0.1" min="0"></label>
           <label title="the course law: pay progress along one fixed heading of the world instead of along the body's own, so that a circle nets nothing and only a line pays. Not a hint: the same outcome, measured along one heading. Ticked on a life without a course, the course is the heading the body holds now (keep going this way), and the metres along it and the high-water mark start at zero; the heading is shown on the law line. The brain reads its heading through the compass (next birth); without one it senses only its yaw rate. Measured in the README's 'The course'"><span>course</span><input id="law-course" type="checkbox"></label>
+          <label title="the strict course: under the course law, pay the lesser of the moment's motion along the course and along the body's own heading, so that only nose first on the course pays in full: backward along the course is then backward along the nose (charged as backward pay says) and nose first off the course pays little. Not a hint: the same outcome measured twice, the lesser paid. Needs the course; off is the course law as above. Measured in the README's 'The strict course'"><span>strict</span><input id="law-strict" type="checkbox"></label>
           <label title="moments the progress term is averaged over: 1 pays each moment's own progress (the plain law), N pays the mean of the last N, so a leg that comes back earns nothing over the window. Measured at 20 and 50: it removes the calm stall, no gait"><span>window</span><input id="law-window" type="number" step="1" min="1"></label>
           <label title="pay new ground only: progress beyond the farthest point reached, so a sway earns nothing. Not a hint, the same outcome counted once; the mark is the life's and is shown on the law line. Off by default; measured: it closes the sway's income and with it nearly all income"><span>high-water</span><input id="law-high_water" type="checkbox"></label>
           <label title="under the high-water mark, the share of the plain pay given for progress on ground already reached: 0 is the mark alone, 1 the plain law, 0.2 to 0.5 the leaking marks measured (the slowest of the laws to lose a found crawl). Needs high-water on"><span>old ground</span><input id="law-old_ground" type="number" step="0.1" min="0" max="1"></label>
           <label title="reward per metre of progress, under the cap of 0.5 a moment: at 40 (the founder) a full stroke pays 0.4; 20, 10 and 5 were measured: 10 goes backward, 5 stands, no gait"><span>pay per metre</span><input id="law-pay_per_metre" type="number" step="1" min="1"></label>
           <label title="share of the pay per metre charged for a metre backward: 0 leaves backward free (the shipped law: a foot in the air pays exactly zero), 1 charges it in full (the first law; measured, it did not help)"><span>backward pay</span><input id="law-backward_pay" type="number" step="0.1" min="0" max="1"></label>
           <label title="the world's current, not a term of the pay: metres a second the body loses backward along its own heading every moment, planted or not, so that standing still and swaying go backward and only a walk faster than the current nets ground. 0 is still ground (the founder); the drift button above switches it between 0 and this dose. Measured in the README's 'The drift'"><span>drift m/s</span><input id="law-drift" type="number" step="0.001" min="0"></label>
-          <button id="apply-law" title="apply the nine settings above from the next moment on; the same law is no change and is not counted">Apply law</button>
+          <button id="apply-law" title="apply the ten settings above from the next moment on; the same law is no change and is not counted">Apply law</button>
         </div>
         <div class="col">
           <p class="small" title="what Reset gives birth to. Genes are composed once, at birth, so they, the seed, the motor model and the senses are set here and take effect on Reset only; the law above is the life's and stays. The sidecar carries the birth, so the server continues it on the next start whatever its flags say">next birth, on Reset</p>
@@ -108,7 +110,7 @@
       <span class="tools"><button id="view-fit" title="return to the resting view">fit</button><button id="view-spin" class="on" title="slow spin until the first drag">spin</button></span>
     </div>
     <div class="host" id="view-host"></div>
-    <p class="small">green: activity · gold: synapses changed this moment · drag to orbit, wheel to zoom</p>
+    <p class="small">blue: activity · gold: synapses changed this moment · drag to orbit, wheel to zoom</p>
   </aside>
 
   <aside id="worldpanel" title="how the world is drawn: the page's choice, not a law of the world; the brain senses joints, feet and motion, never a colour">
@@ -118,7 +120,12 @@
       <input type="color" id="ground-colour" value="#1b2230" title="the colour of the ground disc; kept in this browser only">
       <label for="grid-colour" class="k">grid</label>
       <input type="color" id="grid-colour" value="#262e3c" title="the colour of the grid lines (the two axes through the origin a shade lighter); kept in this browser only">
-      <button id="view-default" title="back to the page's own colours">default</button>
+      <button id="view-default" title="back to the page's own colours and light">default</button>
+    </div>
+    <div class="buttons">
+      <label for="light" class="k">light</label>
+      <input type="range" id="light" min="0.3" max="3" step="0.1" value="1" title="the light on the body and the ground, sky and sun together: 1× is the page's own; kept in this browser only">
+      <span class="v" id="light-value">1.0×</span>
     </div>
   </aside>
 

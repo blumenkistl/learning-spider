@@ -51,7 +51,11 @@ without a page, for measurement.
   sine through the population code) and what it pays through the ground sense (`--ground`, a
   birth option too: the velocity over the ground in the world's frame, two readings, which
   read the world and not the law), and all three are named in every reading made under them.
-  The page's "law, live" changes the eight settings on the living brain
+  The strict course (`--strict`, `STRICT`; off by default) is not a hint either: under a
+  course, the same outcome measured twice, along the course and along the body's own heading,
+  and the lesser paid, so that only nose first on the course pays in full; it needs a course
+  and is named in every reading made under it.
+  The page's "law, live" changes the nine settings on the living brain
   (`Life.set_law`, control `law`); a life whose law changed is a schedule, a different model
   from a life under one law, so every change is noted, counted on the page's law line,
   reported as `law_changes` and saved with the life, and the sidecar's law outranks the flags

@@ -56,7 +56,9 @@ and a computer without an NVIDIA card leaves it out and loses nothing. To contin
 new checkout before the first start: the server loads what it finds there and the sidecar's
 law outranks the flags. A life saved on CUDA loads on the CPU. The nursery's saves and
 summaries live wherever `--save` and `--json` put them and travel the same way. Drag to turn the world horizontally, use the wheel to zoom. The
-panel shows the moment, the brain's mode (aroused or routine), forward distance, the reward
+panel shows the moment, the brain's mode (aroused or routine), forward distance, the speed with
+a bar under it (the moment's speed filled from the centre on a scale of a full stroke each way, the
+last block's mean as a tick), the reward
 just earned, the law it is paid under (progress or a window, the course with the metres along it, the high-water mark with its
 current mark, any shaping term), arousal level and want, the sweeps of the last settle, milliseconds per moment,
 a learning bar, and a strip of the brain's settled state: sensory inputs, association units,
@@ -67,18 +69,19 @@ synapses, drawn by the connectome demo's view (`static/vendor/brain_view.js`, co
 from cadence-demos). The layout is not an anatomy, only shaped like one: the neurons fill an
 ellipsoid, the senses on its rear surface, the module a shell inside them, the association and
 prefrontal regions in the core, the motor cortex a cap on the front as sixteen triplets; each
-neuron's fibres are its incoming synapses, one curved fibre from every presynaptic soma. Green
-is the settled state of the moment, the same vector the strip shows. Gold is learning: on a
+neuron's fibres are its incoming synapses, one curved fibre from every presynaptic soma. Blue
+is the settled state of the moment, the same vector the strip shows (green until 2026-11-13). Gold is learning: on a
 moment the brain learned, each neuron flashes by how much its incoming synapses changed,
 relative to the weight that was there (the demo's formula, gain 40), and the flash fades over
-the following frames. A calm brain is green only; the random control leaves the view at the
+the following frames. A calm brain is blue only; the random control leaves the view at the
 last brain state. Drag to orbit, wheel to zoom, `fit` returns to the resting view, `spin`
 toggles the slow turn. The payload (`/api/brainview`, about 1.5 MB) is built once per brain;
 the per-moment cost of the flash is a copy of the weights before `live` and one difference
 after a learning moment, about 0.1 ms on this machine, inside the ms/moment the panel shows.
-Under it, "The world": the colours of the ground disc and of the grid, with `default` for the
-page's own. They are how the world is drawn, not a law of it (the brain senses joints, feet
-and motion, never a colour), and the choices are kept in the browser, not with the life.
+Under it, "The world": the colours of the ground disc and of the grid, the light on the body
+and the ground (sky and sun together, 0.3× to 3× the page's own), with `default` for the page's
+own. They are how the world is drawn, not a law of it (the brain senses joints, feet and
+motion, never a colour or a light), and the choices are kept in the browser, not with the life.
 
 The learning bar runs from "Brain Stall" (0) to "Learning" (100). It is the share of the last
 1000 moments the brain spent aroused, which under the arousal law is exactly when it learns;
@@ -95,9 +98,9 @@ second, the body's own clock), 2×, 5× or as fast as the machine goes; the HUD'
 shows the pace asked for and the moments a second the loop actually makes.
 
 Every reading, button and setting on the panel explains itself on mouse-over, with the measured dose where one exists. Under the buttons, a collapsed `settings` line opens two columns. **law, live** holds the
-reward's eight settings (the stance and yaw hints, the window, the high-water mark and its leak,
-the pay per metre, the backward charge and the course) and, beside them, the world's drift (a
-current the body loses ground to; "The drift" below), and `Apply law` changes them from the next moment on;
+reward's nine settings (the stance and yaw hints, the window, the high-water mark and its leak,
+the pay per metre, the backward charge, the course and the strict course) and, beside them, the world's drift (a
+current the body loses ground to; "The drift" below), and `Apply law` changes them from the next moment on (a number typed past a field's range is set back to its end, 40 in backward pay to 1, before it is read);
 the outcome already earned is delivered as it was earned, and the same law is no change. A life
 whose law changed is not a life under one law: it is a schedule, and the page says so; the
 `drift` button under the pace switches the current on at the dose the field names (0.002 m/s
@@ -128,8 +131,8 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--policy` (`brain`), `--seed` (0), `--pace` (20), `--backend` (auto), `--runs` (`runs`),
 `--autosave-minutes` (5), `--gene` and `--per` for a newborn brain, and the reward's settings
 `--stance-pay` (0), `--yaw-pay` (0), `--window` (1), `--high-water` (off), `--old-ground` (0),
-`--pay-per-metre` (40), `--backward-pay` (0) and `--course` (off), the two hints, the window, the high-water
-mark and its leak, the gain, the backward charge and the course
+`--pay-per-metre` (40), `--backward-pay` (0), `--course` (off) and `--strict` (off), the two hints, the window, the high-water
+mark and its leak, the gain, the backward charge, the course and the strict course
 described under [the reward](#the-reward-spiderlifepy), `--drift` (0) for the world's current,
 set and saved with the law, `--motors`
 (`target` since 2026-11-12, `rate` before) for a newborn's body, `--layout` (`joint`; `leg` reads
@@ -310,6 +313,18 @@ going this way"), which starts the metres along it and the mark at zero; the hea
 on the law line with the metres along it, saved and loaded with the life. The compass above is
 the sense that heading can be read from. Its readings are under "The course" below; the default
 stays off.
+
+`--strict` (`STRICT` for the server, default off) is the strict course: under the course law,
+the progress term is the lesser of the moment's motion along the course and along the body's
+own heading. The course law alone pays the motion along its line whichever way the body
+points, and a raised brain on the page learned to go down its course tail first (760,000
+moments, 136 m from birth, the forward metres falling while the course metres rose); under
+the strict course that is backward along the nose, free or charged as `--backward-pay` says,
+nose first off the course pays little, and only nose first on the course pays in full. It is
+not a hint: the same outcome measured twice, the lesser paid. It needs a course (set without
+one it is refused; a course switched off switches it off) and is set live on the page's law
+panel like the rest, shown on the law line as `strict`, saved and loaded with the life. The
+default stays off.
 
 `--drift D` (`DRIFT` for the server, default 0) is not a setting of the pay but of the world:
 a current of D metres a second that the body loses backward along its own heading every

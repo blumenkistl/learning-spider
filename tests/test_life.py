@@ -6,7 +6,7 @@ import pytest
 
 from spider.body import JOINTS, Spider
 from spider.brain import SpiderBrain
-from spider.life import BLOCK, PROGRESS_PAY, Life, pay
+from spider.life import law_text, BLOCK, PROGRESS_PAY, Life, pay
 from spider.senses import Senses
 
 
@@ -678,3 +678,58 @@ def test_the_displacement_is_from_the_birth_point_and_survives_recentres_and_sav
     older.load()
     assert older.displacement == pytest.approx([brain.body.x, brain.body.y])
     assert any("without a displacement" in n for n in older.notes)
+
+
+def test_the_strict_course_pays_nose_first_on_the_course_only(tmp_path):
+    """Under ``strict`` the progress term is the lesser of the motion along the course and along
+    the body's own heading: nose first on the course pays as the course law does, tail first
+    down the course is backward along the nose (free, or charged as backward pay says), nose
+    first across the course pays nothing."""
+    import math
+
+    def earned(heading, **law):
+        life = Life("random", seed=0, pace=0, runs=tmp_path, **law)
+        life.policy = RecordingPolicy()                      # every hip sweeps back: forward progress
+        life.body.heading = heading
+        for _ in range(40):
+            life.tick()
+        return sum(r for r in life.policy.rewards if r is not None), life
+
+    along, life = earned(0.0, course=0.0, strict=True)
+    course_only, _ = earned(0.0, course=0.0)
+    assert along == pytest.approx(course_only) and along > 0.5
+    across, _ = earned(math.pi / 2, course=0.0, strict=True)
+    assert across == pytest.approx(0.0, abs=0.02)
+    # tail first down the course: the body points against the course and is driven backward
+    life = Life("random", seed=0, pace=0, runs=tmp_path, course=0.0, strict=True, backward_pay=1.0)
+    life.policy = RecordingPolicy()
+    life.body.heading = math.pi
+    for _ in range(40):
+        life.body.vx = -0.2                                   # pushed tail first: along the course, against the nose
+        life.tick()
+    assert life.distance_course > 0.05 and life.distance_forward < -0.05
+    assert sum(r for r in life.policy.rewards if r is not None) < -0.5
+    loose = Life("random", seed=0, pace=0, runs=tmp_path, course=0.0, backward_pay=1.0)
+    loose.policy = RecordingPolicy()
+    loose.body.heading = math.pi
+    for _ in range(40):
+        loose.body.vx = -0.2
+        loose.tick()
+    assert sum(r for r in loose.policy.rewards if r is not None) > 0.5   # the course law alone pays tail first
+    assert "strict" in law_text(life.law()) and life.describe()["reward"]["strict"] is True
+    # it needs a course; a course switched off switches it off; it is set live, counted and saved
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs=tmp_path, strict=True)
+    plain = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    with pytest.raises(ValueError):
+        plain.set_law({"strict": True})
+    assert plain.set_law({"course": True, "strict": True})["changed"] and plain.strict and plain.course == 0.0
+    assert plain.set_law({"course": None})["changed"] and plain.strict is False and len(plain.law_changes) == 2
+    plain.set_law({"course": True, "strict": True})
+    for _ in range(5):
+        plain.tick()
+    plain.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    again.load()
+    assert again.strict is True and again.course == 0.0 and len(again.law_changes) == 3
+

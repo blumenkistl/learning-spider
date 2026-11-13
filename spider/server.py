@@ -30,7 +30,7 @@ from aiohttp import web
 from .body import DEFAULT_MOTORS, MOTORS
 from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .life import (BACKWARD_PAY, DRIFT, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life,
-                   checked_course)
+                   STRICT, checked_course)
 from .nursery import genes_from, parse_gene
 from .senses import PER, Senses
 
@@ -142,6 +142,9 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--course", type=checked_course, default=checked_course(env("COURSE", COURSE)),
                         help="pay progress along this fixed heading of the world (radians; 'birth' or 0 is the heading at "
                              "birth) instead of along the body's own heading (default off)")
+    parser.add_argument("--strict", action="store_true", default=_flag("STRICT", STRICT),
+                        help="the strict course: under --course, pay the lesser of the motion along the course and along "
+                             "the body's own heading, so that only nose first on the course pays in full (default off)")
     parser.add_argument("--window", type=int, default=int(env("PROGRESS_WINDOW", PROGRESS_WINDOW)),
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--high-water", action="store_true", default=_flag("HIGH_WATER", HIGH_WATER),
@@ -185,6 +188,7 @@ def life_from(args: argparse.Namespace) -> Life:
         course=args.course,
         layout=args.layout,
         drift=args.drift,
+        strict=args.strict,
     )
     life.autosave_minutes = float(args.autosave_minutes)
     if args.policy == "brain" and life.brain_file.exists():

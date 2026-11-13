@@ -107,6 +107,12 @@ def test_flags_mirror_the_nursery_and_the_environment_sets_defaults(tmp_path, mo
     monkeypatch.setenv("DRIFT", "0.005")
     assert arguments([]).drift == 0.005
     assert life_from(arguments(["--high-water", "--policy", "random", "--runs", str(tmp_path)])).body.drift == 0.005
+    assert arguments([]).strict is False and arguments(["--strict"]).strict is True
+    monkeypatch.setenv("STRICT", "1")
+    assert arguments([]).strict is True
+    with pytest.raises(ValueError):                            # the strict course needs a course
+        life_from(arguments(["--high-water", "--policy", "random", "--runs", str(tmp_path)]))
+    assert life_from(arguments(["--high-water", "--course", "birth", "--policy", "random", "--runs", str(tmp_path)])).strict is True
 
 
 async def test_the_law_and_a_birth_are_controls(client):

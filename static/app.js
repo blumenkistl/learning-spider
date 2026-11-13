@@ -30,8 +30,10 @@ controls.maxPolarAngle = 1.15;
 controls.minDistance = 0.6;
 controls.maxDistance = 4;
 
-scene.add(new THREE.HemisphereLight(0xd9e6ff, 0x202830, 0.9));
+const sky = new THREE.HemisphereLight(0xd9e6ff, 0x202830, 0.9);
+scene.add(sky);
 const sun = new THREE.DirectionalLight(0xffffff, 1.4);
+const LIGHT = { sky: sky.intensity, sun: sun.intensity };   // the page's own; the world panel scales both
 sun.position.set(2, -3, 5);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -206,6 +208,19 @@ resize();
 // --- HUD -----------------------------------------------------------------------------------
 const $ = id => document.getElementById(id);
 const fmt = (v, d = 3) => (v === null || v === undefined) ? '—' : Number(v).toFixed(d);
+// A number field keeps its own range: a value past min or max is set back to that end when the
+// field is left, and when it is read (40 typed into backward pay, a share 0 to 1, becomes 1).
+function clamp(field) {
+  if (field.type !== 'number' || field.value === '') return;
+  let v = Number(field.value);
+  if (!Number.isFinite(v)) { field.value = ''; return; }
+  if (field.min !== '' && v < Number(field.min)) v = Number(field.min);
+  if (field.max !== '' && v > Number(field.max)) v = Number(field.max);
+  if (field.step === '1') v = Math.round(v);
+  if (String(v) !== field.value) field.value = v;
+}
+const num = field => { clamp(field); return Number(field.value); };
+for (const f of document.querySelectorAll('input[type=number]')) f.addEventListener('change', () => clamp(f));
 let described = null;
 fetch('/api/describe').then(r => r.json()).then(d => {
   describedBy(d);
@@ -247,7 +262,7 @@ function describedBy(d) {
   $('birth-genes').value = geneWords(genes);
   $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
 }
-const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift'];
+const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift', 'strict'];
 const DRIFT_DOSE = 0.002;   // m/s: what the drift button switches on when the settings field names no dose
 // The nursery's words for a brain's gene overrides: {gamma: 0.99, arousal: {need: 0}} → "gamma=0.99 arousal.need=0".
 function geneWords(genes, prefix = '') {
@@ -266,7 +281,7 @@ function law(m) {
   const r = described && described.reward;
   if (!r) return '—';
   const parts = [r.window > 1 ? `window ${r.window}` : 'progress'];
-  if (r.course !== null && r.course !== undefined) parts.push(`course ${fmt(r.course, 2)} rad · along it ${fmt(m.distance_course)} m`);
+  if (r.course !== null && r.course !== undefined) parts.push(`course ${fmt(r.course, 2)} rad${r.strict ? ', strict' : ''} · along it ${fmt(m.distance_course)} m`);
   if (r.pay_per_metre !== 40) parts.push(`${r.pay_per_metre}/m`);
   if (r.backward_pay) parts.push(`backward ${r.backward_pay}`);
   if (r.high_water) parts.push(`high-water${r.old_ground ? ' leaking ' + r.old_ground : ''} · mark ${fmt(m.mark)} m`);
@@ -279,10 +294,24 @@ function law(m) {
 }
 let lastState = null;
 
+// The speed as a bar under the reading: the moment's forward speed filled from the centre on a
+// scale of a full stroke (0.2 m/s) each way, and the mean of the last block as a tick.
+const STROKE = 0.2;
+function speedbar(m) {
+  const share = Math.max(-1, Math.min(1, (m.speed || 0) / STROKE)) * 50;
+  const fill = $('speed-fill');
+  fill.classList.toggle('back', share < 0);
+  fill.style.left = (share < 0 ? 50 + share : 50) + '%';
+  fill.style.width = Math.abs(share) + '%';
+  const last = m.blocks.length ? m.blocks[m.blocks.length - 1] : null;
+  const mean = last ? last.forward_m / (100 * ((described && described.dt) || 0.05)) : 0;   // metres over the block's seconds
+  $('speed-mean').style.left = (50 + Math.max(-1, Math.min(1, mean / STROKE)) * 50) + '%';
+}
+
 // --- the brain view: the whole connectome in three dimensions, on the right -----------------
 // The view is the connectome demo's (static/vendor/brain_view.js); the payload is this brain's
 // connectome laid out as an ellipsoid, senses at the back, motor cortex at the front, each
-// neuron's lines its incoming synapses. Every frame paints the settled state green and, on a learning
+// neuron's lines its incoming synapses. Every frame paints the settled state blue and, on a learning
 // moment, flashes gold where incoming synapses changed; the flash fades over the next frames.
 let brainView = null, flash = null;
 async function openBrainView() {
@@ -293,7 +322,7 @@ async function openBrainView() {
       // some forty fibres cross every pixel of the ball, so each one is faint and the tone
       // map's exposure low; the demo's colours would burn the ball white
       spin: true, controls: 'legend', scale: 'auto', gamma: 0.8, floor: 0.05, exposure: 0.09,
-      rest: [0.0015, 0.01, 0.003], lit: [0.03, 0.2, 0.06], flash: [0.6, 0.22, 0.01],
+      rest: [0.002, 0.005, 0.012], lit: [0.05, 0.13, 0.32], flash: [0.6, 0.22, 0.01],   // blue for the state, gold for learning
       somaRadius: 0.012, pointRadius: 0.8, pointDim: 0.35, fitScale: 0.95,
     });
     flash = new Float32Array(payload.order.length);
@@ -332,6 +361,7 @@ function update(m) {
   $('forward').textContent = fmt(m.distance_forward) + ' m';
   $('net').textContent = fmt(m.displacement_m) + ' m' + (m.recentres ? ` · recentred ${m.recentres}×` : '');
   $('speed').textContent = fmt(m.speed) + ' m/s';
+  speedbar(m);
   $('reward').textContent = fmt(m.reward, 3) + (m.owed !== null && m.owed !== undefined ? ` (owed ${fmt(m.owed, 3)})` : '');
   lastState = m;
   $('law').textContent = law(m);
@@ -350,7 +380,10 @@ function update(m) {
   $('blocks').textContent = blocks.length
     ? 'last blocks (100 moments): ' + blocks.map(b => `${b.forward_m >= 0 ? '+' : ''}${b.forward_m.toFixed(3)} m, ${b.reward_per_moment.toFixed(3)} r`).join(' · ')
     : '';
-  $('notes').textContent = m.notes.join('\n');
+  const notes = $('notes');
+  const pinned = notes.scrollHeight - notes.scrollTop - notes.clientHeight < 4;   // at the end, or not yet scrolling
+  notes.textContent = m.notes.join('\n');
+  if (pinned) notes.scrollTop = notes.scrollHeight;
   learning(m);
   strip(m);
   paintBrain(m);
@@ -433,12 +466,12 @@ function heat(v) {
 function birth() {
   // the reward learner's three options and the two codes have fields of their own; the rest is the text, in the nursery's words
   const words = [$('birth-genes').value.trim()];
-  if ($('birth-hold').value !== '') words.push('hold=' + Number($('birth-hold').value));
-  if (Number($('birth-entropy').value) > 0) words.push('entropy=' + Number($('birth-entropy').value));
+  if ($('birth-hold').value !== '') words.push('hold=' + num($('birth-hold')));
+  if (num($('birth-entropy')) > 0) words.push('entropy=' + Number($('birth-entropy').value));
   if ($('birth-maturity').checked) words.push('maturity=true');
-  if (Number($('birth-code').value) > 0) words.push('code=' + Math.round(Number($('birth-code').value)));
-  if (Number($('birth-learned-code').value) > 0) words.push('learned_code=' + Math.round(Number($('birth-learned-code').value)));
-  return { seed: Number($('birth-seed').value), motors: $('birth-motors').value, layout: $('birth-layout').value,
+  if (num($('birth-code')) > 0) words.push('code=' + Math.round(Number($('birth-code').value)));
+  if (num($('birth-learned-code')) > 0) words.push('learned_code=' + Math.round(Number($('birth-learned-code').value)));
+  return { seed: num($('birth-seed')), motors: $('birth-motors').value, layout: $('birth-layout').value,
            setpoints: $('birth-setpoints').checked, compass: $('birth-compass').checked, ground: $('birth-ground').checked,
            genes: words.filter(Boolean).join(' ') };
 }
@@ -447,6 +480,19 @@ function resetQuestion(b) {
     + (b.setpoints ? ', setpoints sensed' : '') + (b.compass ? ', a compass' : '') + (b.ground ? ', the ground sense' : '') + ', ' + (b.genes ? 'genes ' + b.genes : 'founder genes') + '.\n'
     + 'The world returns to the origin, every counter goes to zero and the saved life in runs/ is deleted.\n\n'
     + 'The brain that has lived until now is gone for good.';
+}
+// A word that hovers over a button for a moment and fades: the page's answer to a click
+// whose result shows nowhere else (a save changes nothing on the panel).
+function toast(anchor, text) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = text;
+  document.body.appendChild(t);
+  const r = anchor.getBoundingClientRect();
+  t.style.left = (r.left + r.width / 2) + 'px';
+  t.style.top = r.top + 'px';
+  requestAnimationFrame(() => t.classList.add('show'));
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 1100);
 }
 async function control(body) {
   const r = await fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -462,18 +508,19 @@ document.querySelectorAll('button[data-op]').forEach(b => b.addEventListener('cl
   const result = await control(body);
   if (result && b.dataset.op === 'reset') location.reload();
   else if (result && b.dataset.op === 'load') refreshDescription();
+  else if (result && b.dataset.op === 'save') toast(b, result.saved ? 'saved' : (result.why || 'not saved'));
 }));
 // The drift button: off → on at the dose the settings field names (or the measured 0.002 m/s), on → off.
 $('drift').addEventListener('click', async () => {
   const on = !!(described && described.reward && described.reward.drift);
-  const dose = Number($('law-drift').value) > 0 ? Number($('law-drift').value) : DRIFT_DOSE;
+  const dose = num($('law-drift')) > 0 ? Number($('law-drift').value) : DRIFT_DOSE;
   if (await control({ op: 'law', value: { drift: on ? 0 : dose } })) refreshDescription();
 });
 $('apply-law').addEventListener('click', async () => {
   const value = {};
   for (const k of LAW_KEYS) {
     const field = $('law-' + k);
-    value[k] = field.type === 'checkbox' ? field.checked : Number(field.value);
+    value[k] = field.type === 'checkbox' ? field.checked : num(field);
   }
   // the course box: ticked on a life with a course keeps that heading; ticked on one without, the
   // server takes the heading the body holds now (true); unticked is off (null)
@@ -494,20 +541,23 @@ connect();
 // --- the world panel: the colours of the ground and the grid, how the world is drawn, not its law
 // (the brain senses joints, feet and motion, never a colour; the choices live in this browser only)
 const VIEW = {
-  ground: { own: GROUND_COLOUR, paint: hex => ground.material.color.set(hex) },
-  grid: { own: GRID_COLOUR, paint: hex => makeGrid(hex) },
+  ground: { own: GROUND_COLOUR, field: 'ground-colour', paint: hex => ground.material.color.set(hex) },
+  grid: { own: GRID_COLOUR, field: 'grid-colour', paint: hex => makeGrid(hex) },
+  light: { own: '1', field: 'light', paint: v => { sky.intensity = LIGHT.sky * Number(v); sun.intensity = LIGHT.sun * Number(v); } },
 };
-function paintView(name, hex) {
-  VIEW[name].paint(hex);
-  $(name + '-colour').value = hex;
+function paintView(name, value) {
+  VIEW[name].paint(value);
+  $(VIEW[name].field).value = value;
+  if (name === 'light') $('light-value').textContent = Number(value).toFixed(1) + '×';
 }
-function rememberView(name, hex) {
-  const key = name + '-colour';
-  try { if (hex === VIEW[name].own) localStorage.removeItem(key); else localStorage.setItem(key, hex); } catch (e) { /* no storage: the colour lasts the page */ }
+function rememberView(name, value) {
+  const key = 'world-' + name;
+  try { if (String(value) === VIEW[name].own) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch (e) { /* no storage: the choice lasts the page */ }
 }
 for (const name of Object.keys(VIEW)) {
-  try { const kept = localStorage.getItem(name + '-colour'); if (kept) paintView(name, kept); } catch (e) { /* no storage */ }
-  $(name + '-colour').addEventListener('input', (e) => { paintView(name, e.target.value); rememberView(name, e.target.value); });
+  paintView(name, VIEW[name].own);
+  try { const kept = localStorage.getItem('world-' + name); if (kept) paintView(name, kept); } catch (e) { /* no storage */ }
+  $(VIEW[name].field).addEventListener('input', (e) => { paintView(name, e.target.value); rememberView(name, e.target.value); });
 }
 $('view-default').addEventListener('click', () => {
   for (const name of Object.keys(VIEW)) { paintView(name, VIEW[name].own); rememberView(name, VIEW[name].own); }

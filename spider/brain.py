@@ -289,7 +289,7 @@ _LABELS = {"sensory": "senses", "code": "code", "association": "association", "p
 _COLORS = {"sensory": [90, 209, 255], "code": [170, 150, 255], "association": [255, 214, 102],
            "prefrontal": [90, 220, 190],
            "motor": [210, 255, 120]}
-_MODULE_COLOR = [103, 231, 142]
+_MODULE_COLOR = [120, 165, 255]     # the modules' somata: a blue, with the fibres (the demo's Matrix green until 2026-11-13)
 _GOLDEN = np.pi * (3.0 - np.sqrt(5.0))
 
 

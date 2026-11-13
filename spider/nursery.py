@@ -26,7 +26,7 @@ from .body import DEFAULT_MOTORS, MOTORS
 from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
 from .life import (BACKWARD_PAY, DRIFT, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
-                   Life, checked_course)
+                   STRICT, Life, checked_course)
 from .senses import PER, Senses
 
 
@@ -46,7 +46,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
                 yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water, old_ground=args.old_ground,
                 pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay,
-                course=args.course, layout=args.layout, drift=args.drift)
+                course=args.course, layout=args.layout, drift=args.drift, strict=args.strict)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -149,6 +149,9 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     parser.add_argument("--course", type=checked_course, default=COURSE,
                         help="pay progress along this fixed heading of the world (radians; 'birth' or 0 is the heading at "
                              "birth) instead of along the body's own heading (default off)")
+    parser.add_argument("--strict", action="store_true", default=STRICT,
+                        help="the strict course: under --course, pay the lesser of the motion along the course and along "
+                             "the body's own heading, so that only nose first on the course pays in full (default off)")
     parser.add_argument("--window", type=int, default=PROGRESS_WINDOW,
                         help=f"moments the progress term is averaged over (default {PROGRESS_WINDOW})")
     parser.add_argument("--high-water", action="store_true", default=HIGH_WATER,
