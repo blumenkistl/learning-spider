@@ -57,8 +57,9 @@ new checkout before the first start: the server loads what it finds there and th
 law outranks the flags. A life saved on CUDA loads on the CPU. The nursery's saves and
 summaries live wherever `--save` and `--json` put them and travel the same way. Drag to turn the world horizontally, use the wheel to zoom. The
 panel shows the moment, the brain's mode (aroused or routine), forward distance, the speed with
-a bar under it (the moment's speed filled from the centre on a scale of a full stroke each way, the
-last block's mean as a tick), the reward
+a bar under it (the mean forward speed of the last 1000 moments filled from the centre, 0.05 m/s
+each way, the last 100 moments' mean as a tick: the moment's own speed is a sample of the stride
+and swings each way within a step), the reward
 just earned, the law it is paid under (progress or a window, the course with the metres along it, the high-water mark with its
 current mark, any shaping term), arousal level and want, the sweeps of the last settle, milliseconds per moment,
 a learning bar, and a strip of the brain's settled state: sensory inputs, association units,

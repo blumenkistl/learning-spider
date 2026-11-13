@@ -29,6 +29,19 @@ controls.minPolarAngle = 1.15;                        // horizontal rotation onl
 controls.maxPolarAngle = 1.15;
 controls.minDistance = 0.6;
 controls.maxDistance = 4;
+// The wheel zooms by the distance scrolled, in the page's own handler: OrbitControls r160
+// divides the wheel's delta by the device pixel ratio truncated to an integer, which is zero
+// under a browser zoom below 100% (and on any display reporting a ratio under 1), so that one
+// notch jumped to the nearest or the farthest distance and the zoom had two steps.
+controls.enableZoom = false;
+canvas.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const px = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 288 : 1);   // lines and pages as pixels
+  const k = Math.exp(px * 0.0015);                      // a 100 px notch: 16% nearer or farther
+  const offset = camera.position.clone().sub(controls.target);
+  const r = Math.min(controls.maxDistance, Math.max(controls.minDistance, offset.length() * k));
+  camera.position.copy(controls.target).add(offset.setLength(r));
+}, { passive: false });
 
 const sky = new THREE.HemisphereLight(0xd9e6ff, 0x202830, 0.9);
 scene.add(sky);
@@ -112,17 +125,35 @@ const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.06, 12),
 waist.rotation.z = Math.PI / 2;
 waist.position.set(-0.14, 0, 0.012);
 spider.add(waist);
-const eyeSkin = new THREE.MeshStandardMaterial({ color: 0x5ad1ff, emissive: 0x2a7fb0, roughness: 0.3 });
+const eyeSkin = new THREE.MeshStandardMaterial({ color: 0x7a0f14, emissive: 0x8a0c10, roughness: 0.3 });   // dark red, glowing
 for (const [x, y, z, r] of [[0.150, 0.024, 0.030, 0.011], [0.150, -0.024, 0.030, 0.011]]) {   // two eyes
   const eye = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), eyeSkin);
   eye.position.set(x, y, z);
   spider.add(eye);
 }
-for (const sgn of [-1, 1]) {                           // chelicerae, hanging from the front
-  const fang = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.003, 0.035, 8), legSkin);
-  fang.position.set(0.15, sgn * 0.014, -0.035);
-  fang.rotation.x = sgn * 0.25;
+// Chelicerae: two stout basal segments reaching forward and down from under the eyes, each
+// ending in a fang that curves down and inward, the way a tarantula's hang.
+const fangSkin = new THREE.MeshStandardMaterial({ color: 0x0b0d12, roughness: 0.3, metalness: 0.45 });
+for (const sgn of [-1, 1]) {
+  const root = new THREE.Vector3(0.135, sgn * 0.024, -0.008), joint = new THREE.Vector3(0.19, sgn * 0.028, -0.034);
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1, 12), legSkin);
+  placeCylinder(base, root, joint, 0.013);
+  base.castShadow = true;
+  base.add(hairs(40, false, 0.3, 0.6));
+  spider.add(base);
+  const knuckle = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), legSkin);   // rounds the joint
+  knuckle.position.copy(joint);
+  spider.add(knuckle);
+  const curve = new THREE.QuadraticBezierCurve3(joint, new THREE.Vector3(0.215, sgn * 0.024, -0.062),
+                                                new THREE.Vector3(0.196, sgn * 0.008, -0.085));
+  const fang = new THREE.Mesh(new THREE.TubeGeometry(curve, 10, 0.0045, 8, false), fangSkin);
+  fang.castShadow = true;
   spider.add(fang);
+  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.0045, 0.014, 8), fangSkin);   // the point, along the curve's end
+  const end = curve.getPoint(1), tangent = curve.getTangent(1);
+  tip.position.copy(end).addScaledVector(tangent, 0.006);
+  tip.quaternion.setFromUnitVectors(_yUp, tangent);
+  spider.add(tip);
 }
 const unit = new THREE.CylinderGeometry(1, 1, 1, 12);
 const femurShape = new THREE.CylinderGeometry(1, 0.85, 1, 12);   // +y end goes to the knee
@@ -235,14 +266,21 @@ fetch('/api/describe').then(r => r.json()).then(d => {
 }).catch(() => {});
 // What the description settles on the page: the law line, the motor line and the settings' fields.
 // Called again after a control that changes the description (a law change, a load).
+let lawFilled = null;                                  // the law the fields were last filled from
 function describedBy(d) {
   described = d;
   if (lastState) $('law').textContent = law(lastState);
   $('motors').textContent = (d.motors || 'rate') + (d.layout === 'leg' ? ', a slot per leg' : '') + (d.setpoints ? ', setpoints sensed' : '') + (d.compass ? ', a compass' : '') + (d.ground ? ', the ground sense' : '');
   const r = d.reward || {};
-  for (const k of LAW_KEYS) {
-    const field = $('law-' + k);
-    if (field.type === 'checkbox') field.checked = r[k] !== null && r[k] !== undefined && r[k] !== false; else field.value = r[k];
+  // The fields are filled from the server's law only when that law is new to the page: a
+  // description re-read for another reason (the socket reconnecting) leaves a half-made edit alone.
+  const lawNow = JSON.stringify(LAW_KEYS.map(k => r[k]));
+  if (lawNow !== lawFilled) {
+    for (const k of LAW_KEYS) {
+      const field = $('law-' + k);
+      if (field.type === 'checkbox') field.checked = r[k] !== null && r[k] !== undefined && r[k] !== false; else field.value = r[k];
+    }
+    lawFilled = lawNow;
   }
   $('drift').textContent = r.drift ? `drift ${r.drift} m/s` : 'drift off';
   $('drift').classList.toggle('on', !!r.drift);
@@ -294,18 +332,22 @@ function law(m) {
 }
 let lastState = null;
 
-// The speed as a bar under the reading: the moment's forward speed filled from the centre on a
-// scale of a full stroke (0.2 m/s) each way, and the mean of the last block as a tick.
-const STROKE = 0.2;
+// The speed as a bar under the reading. The moment's speed is a sample of the stride, swinging
+// each way within one step, so the bar shows means: the fill is the mean forward speed of the
+// last 1000 moments (the learning bar's horizon, 50 s of the body's clock), the tick the last 100.
+// The scale is 0.05 m/s each way: the fastest gait measured (1.55 m per 1000 moments) fills 60%.
+const SPEED_SCALE = 0.05;
+const SPEED_BLOCKS = 10;
 function speedbar(m) {
-  const share = Math.max(-1, Math.min(1, (m.speed || 0) / STROKE)) * 50;
+  const dt = (described && described.dt) || 0.05;
+  const mean = blocks => blocks.length ? blocks.reduce((a, b) => a + b.forward_m, 0) / (blocks.length * 100 * dt) : 0;
+  const share = Math.max(-1, Math.min(1, mean(m.blocks.slice(-SPEED_BLOCKS)) / SPEED_SCALE)) * 50;
   const fill = $('speed-fill');
   fill.classList.toggle('back', share < 0);
   fill.style.left = (share < 0 ? 50 + share : 50) + '%';
   fill.style.width = Math.abs(share) + '%';
-  const last = m.blocks.length ? m.blocks[m.blocks.length - 1] : null;
-  const mean = last ? last.forward_m / (100 * ((described && described.dt) || 0.05)) : 0;   // metres over the block's seconds
-  $('speed-mean').style.left = (50 + Math.max(-1, Math.min(1, mean / STROKE)) * 50) + '%';
+  $('speed-mean').style.left = (50 + Math.max(-1, Math.min(1, mean(m.blocks.slice(-1)) / SPEED_SCALE)) * 50) + '%';
+  $('speed-label').textContent = fmt(mean(m.blocks.slice(-SPEED_BLOCKS))) + ' m/s';
 }
 
 // --- the brain view: the whole connectome in three dimensions, on the right -----------------

@@ -28,6 +28,7 @@ button.on { background: #203a4a; border-color: var(--accent); }
 .settings input[type=text] { flex: 1; width: auto; }
 .settings .col > .small:last-child { white-space: normal; }
 .settings button { align-self: flex-start; margin-top: 3px; font-size: 12px; padding: 2px 8px; }
+.grid .speedrow { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
 .speedbar { position: relative; flex: 1; height: 8px; margin: 3px 0 2px; border: 1px solid #2d3647; border-radius: 4px; background: #1b2230; overflow: hidden; }
 .speedbar .zero { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: #3a4458; }
 #speed-fill { position: absolute; top: 0; bottom: 0; left: 50%; width: 0; background: var(--accent); transition: left 0.1s, width 0.1s; }
