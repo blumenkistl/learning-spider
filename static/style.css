@@ -43,4 +43,8 @@ button.on { background: #203a4a; border-color: var(--accent); }
 #brainpanel .host { position: relative; flex: 1; min-height: 0; border-radius: 6px; overflow: hidden; background: #000; }
 #brainpanel > .small { margin-top: 6px; }
 @media (max-width: 600px) { #hud { width: calc(100% - 24px); } }
-@media (max-width: 960px) { #brainpanel { display: none; } }
+#worldpanel { position: fixed; right: 12px; top: calc(min(560px, 100% - 24px) + 24px); width: 440px; padding: 10px 12px 8px; background: var(--panel); border: 1px solid #262c38; border-radius: 10px; backdrop-filter: blur(6px); }
+#worldpanel .top { font-size: 14px; margin-bottom: 2px; }
+#worldpanel .buttons { margin-top: 4px; }
+#worldpanel input[type=color] { width: 44px; height: 24px; padding: 0 2px; background: #0a0d12; border: 1px solid #2d3647; border-radius: 4px; cursor: pointer; }
+@media (max-width: 960px) { #brainpanel, #worldpanel { display: none; } }

@@ -99,7 +99,10 @@ FOUNDER: dict[str, Any] = {
     "arousal": {
         "threshold": 0.2, "decay": 0.9, "tolerance": 2.0, "floor": 0.1,
         "fast": 0.05, "slow": 0.005, "heat": 2.0, "youth": 300,
-        "value_surprise": 1.0, "need": 0.05,
+        "value_surprise": 1.0,
+        "need": 0.1,                # 0.05 (the arena's) until 2026-11-13: a stand's income met it and calmed the
+                                    # brain; at 0.1 three seeds of three kept walking and learning over 150,000
+                                    # moments (measured with entropy 0.1 and gamma 0.99; the founder row is below)
     },
     # chosen here, unmeasured against the arena's values:
     "modules": [64, 32],            # the arena: [48, 24] on 32 inputs; here 152 coded inputs

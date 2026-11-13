@@ -16,12 +16,46 @@ Built with `cadence-net==0.99.0` (0.97.1 until 2026-11-13; 0.98 and 0.99 change 
 ```sh
 sudo apt install python3-venv python3-pip                 # once, on Debian or Ubuntu
 python3 -m venv .venv
-.venv/bin/python -m pip install "cadence-net[accel]==0.99.0"   # PyTorch with CUDA, several GB
+.venv/bin/python -m pip install "cadence-net[fast]==0.99.0"    # numba and scipy: the compiled CPU path
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python server.py
 ```
 
-Open http://127.0.0.1:8080. Drag to turn the world horizontally, use the wheel to zoom. The
+Currently best results with:
+
+```sh
+.venv/bin/python server.py --gene gamma=0.99 --gene entropy=0.1 --gene arousal.need=0.1
+```
+
+(Genes are set at birth: these take effect on a newborn, not on a life continued from `runs/`;
+on the page, the same words in the "next birth" gene field and Reset. Measured 2026-11-13:
+4–8 forward metres over 30,000 moments on seeds 0–2, all three still walking and learning at
+150,000, against 0.2–1.5 m for the founder genes; the walk circles.)
+
+Open http://127.0.0.1:8080.
+
+**On a new computer**, from nothing to the page, with the life carried over:
+
+```sh
+git clone https://github.com/blumenkistl/learning-spider.git ~/git/github/learning-spider
+cd ~/git/github/learning-spider
+sudo apt install python3-venv python3-pip                 # Debian or Ubuntu; WSL2 too
+python3 -m venv .venv
+.venv/bin/python -m pip install "cadence-net[fast]==0.99.0"    # numba and scipy: the compiled CPU path
+.venv/bin/python -m pip install -r requirements.txt             # aiohttp for the server, pytest for the tests
+.venv/bin/python -m pytest tests -q                             # 76 pass; one CUDA test is skipped without a card
+.venv/bin/python server.py
+```
+
+`ModuleNotFoundError: No module named 'aiohttp'` on `server.py` means the second `pip install`
+was skipped: the library's package brings only the brain, the server and the tests come from
+`requirements.txt`. `[fast]` brings numba and scipy for the compiled CPU path, the default
+backend; `cadence-net[accel]==0.99.0` adds PyTorch with CUDA (several GB) for `--backend torch`,
+and a computer without an NVIDIA card leaves it out and loses nothing. To continue the life rather than start a newborn, copy the old computer's
+`runs/` (gitignored; `spider.npz` and `spider.json`, or the stems a `--runs` names) into the
+new checkout before the first start: the server loads what it finds there and the sidecar's
+law outranks the flags. A life saved on CUDA loads on the CPU. The nursery's saves and
+summaries live wherever `--save` and `--json` put them and travel the same way. Drag to turn the world horizontally, use the wheel to zoom. The
 panel shows the moment, the brain's mode (aroused or routine), forward distance, the reward
 just earned, the law it is paid under (progress or a window, the course with the metres along it, the high-water mark with its
 current mark, any shaping term), arousal level and want, the sweeps of the last settle, milliseconds per moment,
@@ -42,6 +76,9 @@ last brain state. Drag to orbit, wheel to zoom, `fit` returns to the resting vie
 toggles the slow turn. The payload (`/api/brainview`, about 1.5 MB) is built once per brain;
 the per-moment cost of the flash is a copy of the weights before `live` and one difference
 after a learning moment, about 0.1 ms on this machine, inside the ms/moment the panel shows.
+Under it, "The world": the colours of the ground disc and of the grid, with `default` for the
+page's own. They are how the world is drawn, not a law of it (the brain senses joints, feet
+and motion, never a colour), and the choices are kept in the browser, not with the life.
 
 The learning bar runs from "Brain Stall" (0) to "Learning" (100). It is the share of the last
 1000 moments the brain spent aroused, which under the arousal law is exactly when it learns;
@@ -324,7 +361,7 @@ was chosen by that comparison.
 | actor hold / entropy | off (`hold=none`) / 0 | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
 | maturity (scale, recovery) | off (10, 200,000) | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
 | observation code / learned code (fields) | off / off (none): the cortex reads the coded senses themselves | cadence docs/senses.md, the library's founder values; measured in "The observation codes" |
-| arousal | threshold 0.2, decay 0.9, tolerance 2, floor 0.1, fast 0.05, slow 0.005, heat 2, youth 300, value surprise 1, need 0.05 | Robot Arena founder |
+| arousal | threshold 0.2, decay 0.9, tolerance 2, floor 0.1, fast 0.05, slow 0.005, heat 2, youth 300, value surprise 1, need 0.1 (0.05, the arena's, until 2026-11-13) | Robot Arena founder; the need raised on a reading of 2026-11-13 (a stand's income met 0.05 and calmed the brain; at 0.1 the lives kept walking and learning) |
 
 328 neurons, 22,041 parameters. The motor cortex is read by a layout, composed into the
 brain at birth and kept for its life (`--layout`, `LAYOUT`): `joint`, the founder, sixteen

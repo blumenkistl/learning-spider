@@ -92,7 +92,7 @@
           <label title="maturity (cadence docs/reward.md): the slow use of plasticity that lowers the actor's step as it is spent, at the founder's scale 10 and recovery 200,000 moments (maturity_scale and maturity_recovery in the genes below set others). Off is the founder. Measured: one seed of three held a slow walk, two swayed"><span>maturity</span><input id="birth-maturity" type="checkbox"></label>
           <label title="a fixed random sparse code of the senses (cadence docs/senses.md): the cortex reads that many units, one in ten active, in place of the 152 coded inputs, and the memories key on them; empty is the founder, the observation itself. At least 24; 64 is the docs' width. Measured in the README's 'The observation codes'"><span>code</span><input id="birth-code" type="number" step="1" min="0" placeholder="none"></label>
           <label title="a code region of that many units between the senses and the first module (cadence docs/senses.md), learned by local rules while the brain lives, on which the cortex computes and the memories key; empty is the founder, none. Costs two to three times a moment. learned_code_fields=128,16,8 in the genes below gives the angles, the speed and yaw rate, and the planted flags units of their own. Measured in the README's 'The observation codes'"><span>learned code</span><input id="birth-learned-code" type="number" step="1" min="0" placeholder="none"></label>
-          <label title="other gene overrides for the newborn in the nursery's words, space-separated name=value; empty is the founder. Founder: temperature=0.3 eta=0.03 eta_bias=0.003 lam=0.6 gamma=0.95 eta_critic=5 arousal.need=0.05 arousal.heat=2 modules=64,32 recall=false history_decays= (none) hold=none entropy=0 maturity=false maturity_scale=10 maturity_recovery=200000 code=none learned_code=none learned_code_fields=none. Examples: gamma=0.99 eta_critic=20 arousal.need=0 modules=48,24 recall=true history_decays=0,0.7,0.95 hold=0.9 entropy=0.1 maturity=true learned_code_fields=128,16,8"><span>genes</span><input id="birth-genes" type="text" placeholder="founder" spellcheck="false"></label>
+          <label title="other gene overrides for the newborn in the nursery's words, space-separated name=value; empty is the founder. Founder: temperature=0.3 eta=0.03 eta_bias=0.003 lam=0.6 gamma=0.95 eta_critic=5 arousal.need=0.1 arousal.heat=2 modules=64,32 recall=false history_decays= (none) hold=none entropy=0 maturity=false maturity_scale=10 maturity_recovery=200000 code=none learned_code=none learned_code_fields=none. Examples: gamma=0.99 eta_critic=20 arousal.need=0 modules=48,24 recall=true history_decays=0,0.7,0.95 hold=0.9 entropy=0.1 maturity=true learned_code_fields=128,16,8"><span>genes</span><input id="birth-genes" type="text" placeholder="founder" spellcheck="false"></label>
           <p class="small" id="genesline" title="the genes and seed the living brain was born with">—</p>
         </div>
       </div>
@@ -109,6 +109,17 @@
     </div>
     <div class="host" id="view-host"></div>
     <p class="small">green: activity · gold: synapses changed this moment · drag to orbit, wheel to zoom</p>
+  </aside>
+
+  <aside id="worldpanel" title="how the world is drawn: the page's choice, not a law of the world; the brain senses joints, feet and motion, never a colour">
+    <div class="top"><span>The world</span></div>
+    <div class="buttons">
+      <label for="ground-colour" class="k">ground</label>
+      <input type="color" id="ground-colour" value="#1b2230" title="the colour of the ground disc; kept in this browser only">
+      <label for="grid-colour" class="k">grid</label>
+      <input type="color" id="grid-colour" value="#262e3c" title="the colour of the grid lines (the two axes through the origin a shade lighter); kept in this browser only">
+      <button id="view-default" title="back to the page's own colours">default</button>
+    </div>
   </aside>
 
   <script type="module" src="/static/app.js"></script>

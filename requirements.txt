@@ -1,4 +1,4 @@
-cadence-net[accel]==0.99.0
+cadence-net[fast]==0.99.0
 numpy>=1.26,<3
 aiohttp>=3.9
 pytest>=8

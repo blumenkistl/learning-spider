@@ -39,13 +39,21 @@ sun.shadow.camera.left = sun.shadow.camera.bottom = -3;
 sun.shadow.camera.right = sun.shadow.camera.top = 3;
 scene.add(sun);
 
-const ground = new THREE.Mesh(new THREE.CircleGeometry(5.5, 96), new THREE.MeshStandardMaterial({ color: 0x1b2230, roughness: 1 }));
+const GROUND_COLOUR = '#1b2230';                      // the page's own; the view panel changes it, for this browser only
+const ground = new THREE.Mesh(new THREE.CircleGeometry(5.5, 96), new THREE.MeshStandardMaterial({ color: GROUND_COLOUR, roughness: 1 }));
 ground.receiveShadow = true;
 scene.add(ground);
-const grid = new THREE.GridHelper(10, 40, 0x3a4458, 0x262e3c);
-grid.rotation.x = Math.PI / 2;                        // GridHelper is y-up by default
-grid.position.z = 0.001;
-scene.add(grid);
+const GRID_COLOUR = '#262e3c';                        // the page's own; the two axes through the origin a shade lighter
+let grid = null;
+function makeGrid(hex) {                              // GridHelper bakes its colours into the geometry: recolouring is rebuilding
+  if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
+  const axes = new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), 0.12);
+  grid = new THREE.GridHelper(10, 40, axes, hex);
+  grid.rotation.x = Math.PI / 2;                      // GridHelper is y-up by default
+  grid.position.z = 0.001;
+  scene.add(grid);
+}
+makeGrid(GRID_COLOUR);
 const rim = new THREE.Mesh(new THREE.RingGeometry(4.98, 5.02, 128), new THREE.MeshBasicMaterial({ color: 0x5ad1ff, side: THREE.DoubleSide }));
 rim.position.z = 0.002;
 scene.add(rim);
@@ -482,3 +490,25 @@ function connect() {
   ws.onerror = () => ws.close();
 }
 connect();
+
+// --- the world panel: the colours of the ground and the grid, how the world is drawn, not its law
+// (the brain senses joints, feet and motion, never a colour; the choices live in this browser only)
+const VIEW = {
+  ground: { own: GROUND_COLOUR, paint: hex => ground.material.color.set(hex) },
+  grid: { own: GRID_COLOUR, paint: hex => makeGrid(hex) },
+};
+function paintView(name, hex) {
+  VIEW[name].paint(hex);
+  $(name + '-colour').value = hex;
+}
+function rememberView(name, hex) {
+  const key = name + '-colour';
+  try { if (hex === VIEW[name].own) localStorage.removeItem(key); else localStorage.setItem(key, hex); } catch (e) { /* no storage: the colour lasts the page */ }
+}
+for (const name of Object.keys(VIEW)) {
+  try { const kept = localStorage.getItem(name + '-colour'); if (kept) paintView(name, kept); } catch (e) { /* no storage */ }
+  $(name + '-colour').addEventListener('input', (e) => { paintView(name, e.target.value); rememberView(name, e.target.value); });
+}
+$('view-default').addEventListener('click', () => {
+  for (const name of Object.keys(VIEW)) { paintView(name, VIEW[name].own); rememberView(name, VIEW[name].own); }
+});
