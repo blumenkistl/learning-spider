@@ -5,7 +5,7 @@ import pytest
 
 from spider.body import (
     HIPS, LEG_CONVERGE, SPLAY, separate, supported,
-    ARENA_RADIUS, CONTACT_Z, HEIGHT, HIP_RANGE, JOINTS, KNEE_RANGE, LEGS, Spider, kinematics,
+    ARENA_RADIUS, CONTACT_Z, DT, HEIGHT, HIP_RANGE, JOINTS, KNEE_RANGE, LEGS, Spider, kinematics,
 )
 
 
@@ -414,3 +414,79 @@ def test_the_muscle_rate_scales_how_far_a_joint_runs_in_a_moment():
     assert Spider.restore(renamed).muscles == "target" and Spider.restore(renamed).muscle_rate == 3.0
     with pytest.raises(ValueError):
         Spider(muscle_rate=0.0)
+
+
+def test_the_hills_raise_the_body_and_plant_the_feet_on_the_terrain():
+    from spider.body import ARENAS, ground_height
+
+    from spider.body import HILLS, STEEP
+
+    assert ARENAS == ("flat", "hills", "steep")
+    # the steep hills are the same waves half as high again: the same ground, scaled
+    xs0, ys0 = np.linspace(-5, 5, 37), np.linspace(5, -5, 37)
+    assert np.allclose(ground_height("steep", xs0, ys0), 1.5 * ground_height("hills", xs0, ys0), atol=1e-3)
+    assert [w[:2] + w[3:] for w in STEEP] == [w[:2] + w[3:] for w in HILLS]
+    steep = Spider(arena="steep")
+    assert all(steep.pose()["planted"]) and Spider.restore(steep.state_dict()).arena == "steep"
+    with pytest.raises(ValueError):
+        Spider(arena="moon")
+    flat, hills = Spider(), Spider(arena="hills")
+    assert np.all(ground_height("flat", np.arange(5.0), np.arange(5.0)) == 0.0)
+    # the terrain rolls a few centimetres either way and is fixed: the same height at the same point
+    xs, ys = np.meshgrid(np.linspace(-5, 5, 101), np.linspace(-5, 5, 101))
+    h = ground_height("hills", xs, ys)
+    assert 0.03 < h.max() < 0.1 and -0.1 < h.min() < -0.03
+    assert np.array_equal(h, ground_height("hills", xs, ys))
+    # at rest on the hills every foot stands on the ground under it, the body rides on the lowest
+    pose = hills.pose()
+    under = np.array(pose["ground"])
+    assert np.allclose(under, ground_height("hills", *_feet_world(hills)), atol=1e-4)
+    assert abs(pose["z"] - (under.min() + HEIGHT)) < 1e-4 and all(pose["planted"])
+    # the same walk on both arenas: the flat one is the founder's, the hills one moves too
+    for _ in range(40):
+        a, b = flat.step(command(hips=0)), hills.step(command(hips=0))
+    assert flat.pose()["ground"] == [0.0] * LEGS and flat.pose()["z"] == HEIGHT
+    assert hills.x != 0.0 or hills.y != 0.0
+    twin = Spider.restore(hills.state_dict())
+    assert twin.arena == "hills" and twin.state_dict() == hills.state_dict()
+    old = hills.state_dict()
+    del old["arena"]
+    assert Spider.restore(old).arena == "flat"                # a save from before the hills stood on flat ground
+
+
+def _feet_world(spider):
+    pose = spider.pose()
+    c, s = math.cos(pose["heading"]), math.sin(pose["heading"])
+    fx = np.array([leg[3] for leg in pose["legs"]])
+    fy = np.array([leg[4] for leg in pose["legs"]])
+    return pose["x"] + c * fx - s * fy, pose["y"] + s * fx + c * fy
+
+
+def test_the_slope_pull_creeps_downhill_on_the_terrains_and_nowhere_else():
+    from spider.body import ground_slope
+
+    with pytest.raises(ValueError):
+        Spider(arena="steep", slope_pull=-1)
+    # the gradient is the height's: a small step along it rises by its length times the slope
+    gx, gy = ground_slope("steep", 0.7, -1.3)
+    from spider.body import ground_height
+    e = 1e-5
+    assert abs(gx - (ground_height("steep", 0.7 + e, -1.3) - ground_height("steep", 0.7 - e, -1.3)) / (2 * e)) < 1e-6
+    assert abs(gy - (ground_height("steep", 0.7, -1.3 + e) - ground_height("steep", 0.7, -1.3 - e)) / (2 * e)) < 1e-6
+    assert ground_slope("flat", 0.7, -1.3) == (0.0, 0.0)
+    # a body holding still on a slope creeps down it and loses height; on flat ground nothing pulls
+    still = Spider(arena="steep", slope_pull=0.5, x=0.7, y=-1.3)
+    free = Spider(arena="steep", x=0.7, y=-1.3)
+    flat = Spider(slope_pull=0.5, x=0.7, y=-1.3)
+    for _ in range(40):
+        still.step(hold()), free.step(hold()), flat.step(hold())
+    assert (free.x, free.y) == (0.7, -1.3) and (flat.x, flat.y) == (0.7, -1.3)
+    assert ground_height("steep", still.x, still.y) < ground_height("steep", 0.7, -1.3)
+    # the pull is the world's: the progress along the heading and the ground velocity carry it
+    out = Spider(arena="steep", slope_pull=0.5, x=0.7, y=-1.3).step(hold())
+    assert out["progress"] == pytest.approx(-0.5 * gx * DT, rel=1e-6)   # heading 0: along x
+    assert out["moved"] == pytest.approx((-0.5 * gx * DT, -0.5 * gy * DT), rel=1e-6)
+    assert Spider.restore(still.state_dict()).slope_pull == 0.5
+    old = still.state_dict()
+    del old["slope_pull"]
+    assert Spider.restore(old).slope_pull == 0.0

@@ -55,7 +55,7 @@ without a page, for measurement.
   course, the same outcome measured twice, along the course and along the body's own heading,
   and the lesser paid, so that only nose first on the course pays in full; it needs a course
   and is named in every reading made under it.
-  The page's "law, live" changes the nine settings on the living brain
+  The page's "law, live" changes the law's settings on the living brain
   (`Life.set_law`, control `law`); a life whose law changed is a schedule, a different model
   from a life under one law, so every change is noted, counted on the page's law line,
   reported as `law_changes` and saved with the life, and the sidecar's law outranks the flags
@@ -74,6 +74,17 @@ without a page, for measurement.
   brain still chooses every moment. A body at another rate is another body, so the rate is
   set, shown, saved and counted with the law like the drift and named in every reading made
   under it.
+  The arena (`--arena`, `ARENA`; `flat` by default) is the world's ground: `flat`, the founder,
+  `hills`, a fixed rolling height field (`ground_height` in `spider/body.py`), or `steep`, the
+  same field half as high again, under a body that does not tilt. It supplies a problem,
+  never an answer: no slope force but the pull below, and the brain senses no height. A life on the hills is a different world, so the arena is set, shown,
+  saved and counted with the law like the drift (the page's arena select is a law change) and
+  named in every reading made under it; the page draws the server's terrain, never its own.
+  The slope pull (`--slope-pull`, `SLOPE_PULL`; 0 by default) is the terrain's: a creep down
+  the slope under the body's centre every moment, planted or not, like the drift and not a
+  force (a factor on uphill motion alone would pay a sway). It is set, shown, saved and counted
+  with the law like the drift (the page's `slope pull` button is a law change) and named in
+  every reading made under it.
 - **Every outcome is delivered exactly once.** `Life.reward` is the last executed command's
   outcome not yet delivered. A refusal keeps it in the policy's `owed`; a policy switch moves it
   to the brain's `owed`; a save writes it to the sidecar; a load delivers it. Keep the tests in

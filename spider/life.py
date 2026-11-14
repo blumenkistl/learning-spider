@@ -27,7 +27,7 @@ from typing import Any
 
 import numpy as np
 
-from .body import DEFAULT_MUSCLES, DT, HEIGHT, HIPS, JOINTS, LEGS, MUSCLES, Spider
+from .body import ARENAS, DEFAULT_MUSCLES, DT, HEIGHT, HIPS, TERRAINS, JOINTS, LEGS, MUSCLES, Spider
 from .brain import (DEFAULT_LAYOUT, LAYOUTS, FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, gene_words,
                     genes_from_text, make_policy)
 from .senses import DEFAULT as DEFAULT_SENSES, Senses
@@ -45,6 +45,11 @@ DRIFT = 0.0             # the world's current, metres a second the body loses ba
 MUSCLE_RATE = 1.0        # a factor on both joint rates: how far a joint runs toward its command in one moment
                         # (the body's, not a controller; 1 is the founder body); set, shown, saved and counted
                         # with the law like the drift; --muscle-rate / MUSCLE_RATE set it (README, "The muscle rate")
+ARENA = "flat"          # the ground: flat (the founder, the plane z = 0), hills (a fixed sum of long waves,
+                        # a few centimetres up and down) or steep (the same half as high again); the world's, set, shown, saved and counted with the
+                        # law like the drift; --arena / ARENA set it (README, "The hills")
+SLOPE_PULL = 0.0        # m/s downhill at a slope of 1 on the terrains: the world's pull, a creep down the slope
+                        # under the body's centre, planted or not (README, "The hills"); 0 = none, the founder
 STANCE_FLOOR = LEGS // 2   # feet the world wants on the ground through every moment: half of them
 STANCE_PAY = 0.0        # taken per foot short of the floor: a hint, shaping, not an outcome; off by default,
                         # 0.1 is the measured dose (README, "The stance term"); --stance-pay / STANCE_PAY set it
@@ -122,7 +127,7 @@ def _renamed(state: dict[str, Any]) -> None:
 
 
 LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay", "course",
-            "drift", "strict", "muscle_rate")
+            "drift", "strict", "muscle_rate", "arena", "slope_pull")
 
 
 def checked_course(course: Any) -> float | None:
@@ -147,7 +152,8 @@ def checked_course(course: Any) -> float | None:
 def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window: Any = PROGRESS_WINDOW,
                 high_water: Any = HIGH_WATER, old_ground: Any = OLD_GROUND, pay_per_metre: Any = PROGRESS_PAY,
                 backward_pay: Any = BACKWARD_PAY, course: Any = COURSE, drift: Any = DRIFT,
-                strict: Any = STRICT, muscle_rate: Any = MUSCLE_RATE) -> dict[str, Any]:
+                strict: Any = STRICT, muscle_rate: Any = MUSCLE_RATE, arena: Any = ARENA,
+                slope_pull: Any = SLOPE_PULL) -> dict[str, Any]:
     """The law's eleven settings, typed and checked; a ValueError names what is wrong. The
     drift is the world's and not the pay's, but it is set, shown, saved and counted with the
     law, so that a life whose world changed reads as the schedule it is."""
@@ -156,6 +162,10 @@ def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window:
         raise ValueError(f"the drift is a speed backward in m/s, 0 or more, not {drift}")
     if not math.isfinite(float(muscle_rate)) or float(muscle_rate) <= 0:
         raise ValueError(f"the muscle rate is a positive factor on the joint rates, not {muscle_rate}")
+    if arena not in ARENAS:
+        raise ValueError(f"the arena is one of {', '.join(ARENAS)}, not {arena!r}")
+    if not math.isfinite(float(slope_pull)) or float(slope_pull) < 0:
+        raise ValueError(f"the slope pull is a speed downhill at a slope of 1 in m/s, 0 or more, not {slope_pull}")
     if not 0.0 <= float(old_ground) <= 1.0:
         raise ValueError(f"old ground is a share of the pay, 0 to 1, not {old_ground}")
     if float(old_ground) and not high_water:
@@ -173,7 +183,8 @@ def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window:
     return {"stance_pay": float(stance_pay), "yaw_pay": float(yaw_pay), "window": int(window),
             "high_water": high_water, "old_ground": float(old_ground),
             "pay_per_metre": float(pay_per_metre), "backward_pay": float(backward_pay),
-            "course": course, "drift": float(drift), "strict": strict, "muscle_rate": float(muscle_rate)}
+            "course": course, "drift": float(drift), "strict": strict, "muscle_rate": float(muscle_rate),
+            "arena": str(arena), "slope_pull": float(slope_pull)}
 
 
 def law_text(law: dict[str, Any]) -> str:
@@ -195,6 +206,10 @@ def law_text(law: dict[str, Any]) -> str:
         parts.append(f"drift {law['drift']:g} m/s")
     if law.get("muscle_rate", 1.0) != 1.0:
         parts.append(f"muscles ×{law['muscle_rate']:g}")
+    if law.get("arena", ARENA) != "flat":
+        parts.append(law["arena"])
+    if law.get("slope_pull"):
+        parts.append(f"slope pull {law['slope_pull']:g}")
     return " · ".join(parts)
 
 
@@ -225,11 +240,14 @@ class Life:
         drift: float = DRIFT,
         strict: bool = STRICT,
         muscle_rate: float = MUSCLE_RATE,
+        arena: str = ARENA,
+        slope_pull: float = SLOPE_PULL,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self._take_law(checked_law(stance_pay=stance_pay, yaw_pay=yaw_pay, window=window, high_water=high_water,
                                    old_ground=old_ground, pay_per_metre=pay_per_metre, backward_pay=backward_pay,
-                                   course=course, drift=drift, strict=strict, muscle_rate=muscle_rate))
+                                   course=course, drift=drift, strict=strict, muscle_rate=muscle_rate,
+                                   arena=arena, slope_pull=slope_pull))
         self.mark = 0.0                         # the farthest paid distance reached: the high-water mark
         self.law_changes: list[dict[str, Any]] = []   # every live change of the law, moment and law (a schedule)
         self.seed = int(seed)
@@ -244,7 +262,8 @@ class Life:
         self.muscles = str(muscles)               # the body's muscle model, the life's own; a saved life keeps its own
         if senses.setpoints and self.muscles != "target":
             raise ValueError("the setpoint senses need target muscles (--muscles target)")
-        self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate)
+        self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate, arena=self.arena,
+                           slope_pull=self.slope_pull)
         if layout not in LAYOUTS:
             raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
         self.layout = str(layout)               # how the brain's answer is read, a slot per joint or per leg; the
@@ -288,9 +307,13 @@ class Life:
         self.drift = law["drift"]               # the world's current, which the body applies each moment
         self.strict = law["strict"]             # under a course: the lesser of along the course and along the nose
         self.muscle_rate = law["muscle_rate"]     # the body's joint rates, as a factor: how far a joint runs in a moment
+        self.arena = law["arena"]               # the ground the body stands on: flat, hills or steep
+        self.slope_pull = law["slope_pull"]     # the terrain's pull downhill, which the body applies each moment
         if hasattr(self, "body"):
             self.body.drift = self.drift
             self.body.muscle_rate = self.muscle_rate
+            self.body.arena = self.arena
+            self.body.slope_pull = self.slope_pull
         self.window = law["window"]
         kept = list(getattr(self, "_progress", []))[-self.window:]
         self._progress: deque[float] = deque(kept, maxlen=self.window)   # the last window moments' progress
@@ -303,7 +326,8 @@ class Life:
         return {"stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay, "window": self.window,
                 "high_water": self.high_water, "old_ground": self.old_ground,
                 "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay, "course": self.course,
-                "drift": self.drift, "strict": self.strict, "muscle_rate": self.muscle_rate}
+                "drift": self.drift, "strict": self.strict, "muscle_rate": self.muscle_rate,
+                "arena": self.arena, "slope_pull": self.slope_pull}
 
     def _paid_distance(self) -> float:
         """The distance the progress term is measured on: along the course under the course law,
@@ -683,6 +707,8 @@ class Life:
                                           "it starts where the body stands")
                 self.body.drift = self.drift    # the law's, which the sidecar's law set above
                 self.body.muscle_rate = self.muscle_rate
+                self.body.arena = self.arena
+                self.body.slope_pull = self.slope_pull
                 if self.body.muscles != self.muscles:
                     self.notes.append(f"saved with {self.body.muscles} muscles, asked for {self.muscles}: the saved life keeps its own")
                     self.muscles = self.body.muscles
@@ -698,7 +724,8 @@ class Life:
                 # the brain's pending command is known, its outcome is not: it reads as an
                 # observed zero at the next moment, which is a break in custody, reported
                 self.reward = None
-                self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate)
+                self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate, arena=self.arena,
+                                   slope_pull=self.slope_pull)
                 custody = "broken: no sidecar, the pending outcome is lost"
                 self.notes.append(custody)
             self._block = []
@@ -749,7 +776,8 @@ class Life:
             self.seed, self.genes, self.muscles, self.senses, self.layout = seed, genes, muscles, senses, layout
             self.policy = newborn
             self._brain = None
-            self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate)
+            self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate, arena=self.arena,
+                               slope_pull=self.slope_pull)
             self.reward = None
             self.moments = 0
             self.distance_forward = 0.0
@@ -790,6 +818,7 @@ class Life:
             "pace": self.pace,
             "dt": DT,
             "muscles": self.muscles,
+            "terrains": {name: [list(w) for w in waves] for name, waves in TERRAINS.items()},   # (wavelength, direction, amplitude, phase): the page draws the same ground
             "layout": self.layout,
             "inputs": self.senses.inputs,
             "setpoints": self.senses.setpoints,

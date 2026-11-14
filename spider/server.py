@@ -9,7 +9,9 @@ The flags are the nursery's (``python server.py --help``). Each has an environme
 of the same meaning that sets its default: HOST (127.0.0.1), PORT (8080), POLICY (brain),
 SEED (0), PACE (20 moments/s), BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs),
 AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), OLD_GROUND (0), PAY_PER_METRE (40),
-BACKWARD_PAY (0), COURSE (off) and DRIFT (0, the world's current), the reward's settings, MUSCLES (target) for a newborn's body, LAYOUT (joint)
+BACKWARD_PAY (0), COURSE (off), DRIFT (0, the world's current), ARENA (flat, hills or steep)
+and SLOPE_PULL (0, the terrain's pull downhill), the reward's settings, MUSCLES (target) for a
+newborn's body, LAYOUT (joint)
 for how a newborn brain's answer is read (a slot per joint or per leg), SETPOINTS (0) to
 sense the servos' setpoints too, COMPASS (0) to sense the heading and GROUND (0) to sense the velocity over the ground. A saved life in RUNS is continued, with its own genes, seed,
 senses, muscles, layout and law; shutdown saves it. The page's settings change the law on the living
@@ -27,10 +29,10 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .body import DEFAULT_MUSCLES, MUSCLES
+from .body import ARENAS, DEFAULT_MUSCLES, MUSCLES
 from .brain import DEFAULT_LAYOUT, LAYOUTS
-from .life import (BACKWARD_PAY, DRIFT, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life,
-                   MUSCLE_RATE, STRICT, checked_course)
+from .life import (BACKWARD_PAY, DRIFT, SLOPE_PULL, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life,
+                   ARENA, MUSCLE_RATE, STRICT, checked_course)
 from .nursery import genes_from, parse_gene
 from .senses import PER, Senses
 
@@ -158,6 +160,12 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--muscle-rate", type=float, default=float(env("MUSCLE_RATE", MUSCLE_RATE)),
                         help=f"a factor on both joint rates: how far a joint runs toward its command in one moment "
                              f"(default {MUSCLE_RATE}; the body's, set and saved with the law)")
+    parser.add_argument("--arena", choices=ARENAS, default=env("ARENA", ARENA),
+                        help=f"the ground: flat, hills, a fixed rolling terrain, or steep, the same half as high again (default {ARENA}; the world's, "
+                             f"set and saved with the law)")
+    parser.add_argument("--slope-pull", type=float, default=float(env("SLOPE_PULL", SLOPE_PULL)),
+                        help=f"the terrain's pull downhill: metres a second the body creeps down the slope under it "
+                             f"at a slope of 1, planted or not (default {SLOPE_PULL}; 0 = none; nothing on flat ground)")
     parser.add_argument("--drift", type=float, default=float(env("DRIFT", DRIFT)),
                         help=f"the world's current: metres a second the body loses backward along its heading every "
                              f"moment, planted or not (default {DRIFT}; 0 = still ground)")
@@ -193,6 +201,8 @@ def life_from(args: argparse.Namespace) -> Life:
         drift=args.drift,
         strict=args.strict,
         muscle_rate=args.muscle_rate,
+        arena=args.arena,
+        slope_pull=args.slope_pull,
     )
     life.autosave_minutes = float(args.autosave_minutes)
     if args.policy == "brain" and life.brain_file.exists():

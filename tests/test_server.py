@@ -113,6 +113,13 @@ def test_flags_mirror_the_nursery_and_the_environment_sets_defaults(tmp_path, mo
     with pytest.raises(ValueError):                            # the strict course needs a course
         life_from(arguments(["--high-water", "--policy", "random", "--runs", str(tmp_path)]))
     assert life_from(arguments(["--high-water", "--course", "birth", "--policy", "random", "--runs", str(tmp_path)])).strict is True
+    assert arguments([]).arena == "flat" and arguments(["--arena", "hills"]).arena == "hills"
+    monkeypatch.setenv("ARENA", "hills")
+    assert arguments([]).arena == "hills"
+    assert arguments([]).slope_pull == 0.0 and arguments(["--slope-pull", "0.5"]).slope_pull == 0.5
+    monkeypatch.setenv("SLOPE_PULL", "0.3")
+    assert life_from(arguments(["--high-water", "--course", "birth", "--policy", "random", "--runs", str(tmp_path)])).body.slope_pull == 0.3
+    assert life_from(arguments(["--high-water", "--course", "birth", "--policy", "random", "--runs", str(tmp_path)])).body.arena == "hills"
 
 
 async def test_the_law_and_a_birth_are_controls(client):

@@ -84,9 +84,13 @@ last brain state. Drag to orbit, wheel to zoom, `fit` returns to the resting vie
 toggles the slow turn. The payload (`/api/brainview`, about 1.5 MB) is built once per brain;
 the per-moment cost of the flash is a copy of the weights before `live` and one difference
 after a learning moment, about 0.1 ms on this machine, inside the ms/moment the panel shows.
-Under it, "The world": the colours of the ground disc and of the grid, the light on the body
+Under it, "The world": first the arena, `flat`, `hills` or `steep` ([the hills](#the-body-spiderbodypy)),
+which is the world's law and not the page's: choosing one changes the ground under the living
+brain, a law change counted on the law line like the drift, and the page draws the ground,
+grid and rim on the server's terrain. The `slope pull` button beside `drift` switches the
+terrain's pull downhill on and off, a law change too. Then the colours of the ground disc and of the grid, the light on the body
 and the ground (sky and sun together, 0.3× to 3× the page's own), with `default` for the page's
-own. They are how the world is drawn, not a law of it (the brain senses joints, feet and
+own. These are how the world is drawn, not a law of it (the brain senses joints, feet and
 motion, never a colour or a light), and the choices are kept in the browser, not with the life.
 
 The learning bar runs from "Brain Stall" (0) to "Learning" (100). It is the share of the last
@@ -140,14 +144,16 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--stance-pay` (0), `--yaw-pay` (0), `--window` (1), `--high-water` (off), `--old-ground` (0),
 `--pay-per-metre` (40), `--backward-pay` (0), `--course` (off) and `--strict` (off), the two hints, the window, the high-water
 mark and its leak, the gain, the backward charge, the course and the strict course
-described under [the reward](#the-reward-spiderlifepy), `--drift` (0) for the world's current
-and `--muscle-rate` (1) for the body's joint rates, both set and saved with the law, `--muscles`
+described under [the reward](#the-reward-spiderlifepy), `--drift` (0) for the world's current,
+`--muscle-rate` (1) for the body's joint rates, `--arena` (`flat`; `hills` or `steep` for the
+rolling ground) and `--slope-pull` (0) for the terrain's pull downhill, all four set and saved
+with the law, `--muscles`
 (`target` since 2026-11-12, `rate` before) for a newborn's body, `--layout` (`joint`; `leg` reads
 a newborn brain's answer a leg at a time, [the brain](#the-brain-spiderbrainpy)), `--setpoints` (off) to sense the servos' setpoints too
 and `--compass` (off) to sense the heading, `--ground` (off) to sense the velocity over the
 ground. An environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
 `AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `OLD_GROUND`, `PAY_PER_METRE`,
-`BACKWARD_PAY`, `COURSE`, `MUSCLES`, `LAYOUT`, `SETPOINTS`, `COMPASS`, `GROUND`) sets a flag's
+`BACKWARD_PAY`, `COURSE`, `DRIFT`, `MUSCLE_RATE`, `ARENA`, `SLOPE_PULL`, `MUSCLES`, `LAYOUT`, `SETPOINTS`, `COMPASS`, `GROUND`) sets a flag's
 default. A saved life is continued with its own genes, seed, senses, muscles, layout and law, each
 noted when a flag asked for another (a life saved before the sidecar carried the law, the seed
 and the senses takes them from the flags, as before), and the high-water mark of a life saved
@@ -235,6 +241,39 @@ three feet across both sides again since 2026-11-12, this time by the physical a
 one side's feet cannot hold a body up, with the pressing range keeping it reachable. Beyond a radius of 5 m the body is recentred, which is a change of place, not a
 new life. No pitch or roll, no leg thickness beyond the stop, no friction model: the contact rule is a model
 chosen so that sliding and swinging do not pay and a gait does.
+
+**The hills.** The world has three arenas (`--arena`, `ARENA` for the server, `flat` the
+default and the founder's). On `hills` the ground is a fixed rolling terrain, the sum of four
+cosine waves of 1.3 to 3.1 m wavelength (`HILLS` and `ground_height` in `spider/body.py`):
+about ±6 cm of height, slopes mostly under 0.11. `steep` is the same waves at 1.5 times the
+amplitude (`STEEP`), about ±9 cm, so the ground under the eight feet differs about half as
+much again. That is near the most this body holds: at twice the amplitude a foot over the
+highest ground could not lift clear of it, and the body would stand half sunk in the slope. The body does not tilt: it stands at its
+height above the ground under its lowest foot, and a foot is planted when it is within the
+contact distance of the ground under it, so a foot over higher ground is planted sooner and
+must lift further to swing free (the lowest foot's ground sets the body's height, so no foot
+stands below it). Propulsion is the
+same two-dimensional fit of the planted feet's motion; there is no downhill pull and no
+climbing cost beyond that. The flat arena is the founder's world unchanged, bit for bit. The
+arena is the world's, not a hint: it is set, shown, saved and counted with the law (a change
+live, the page's arena select, is a law change, and the life a schedule), a save from before
+the hills stands on flat ground, and every reading made on the hills names which. The brain
+senses no height; it meets the terrain only through which feet are planted.
+
+**The slope pull.** On the terrains the world can pull downhill (`--slope-pull V`,
+`SLOPE_PULL` for the server, default 0, `slope_pull` in `spider/body.py`): every moment the
+body creeps down the steepest slope under its centre at V metres a second times the slope,
+planted or not, on top of what its feet did, as the drift takes its ground. The body has no
+mass and its muscles spend no energy, so the pull is a creep and not a force: a walk uphill
+nets less, a walk downhill more, and a body standing on a slope slides toward the valley and
+stops where the ground is level. A factor on uphill motion alone was not taken because it would
+pay a sway along the slope; a creep pays a sway nothing. The progress along the heading, the
+displacement and the ground sense all carry the creep. It is the world's, set, shown, saved and
+counted with the law (the page's `slope pull` button switches it between 0 and the dose in the
+settings, 0.5 unless the field names another; a change live is a law change), named in every
+reading made under it, and pulls nothing on flat ground. On `steep` the slope is about 0.09 in
+the median and at most 0.22, so 0.5 creeps some 5 cm/s on a typical slope. It is unmeasured
+beyond a check; the default stays 0.
 
 The joints take the brain's three answers in one of two muscle models, the body's for its life
 (`--muscles`, `MUSCLES` for the server; a saved life keeps its own and a flag that differs is
@@ -1852,6 +1891,9 @@ reproduce them with the same seeds.
   except the decay while the body is down (fewer than three feet planted, or none on one
   side). A down body does not fall: its lifted legs stay where they are and it stands again
   the moment its feet support it. A gait that moves this body may not move a physical one.
+- The hills are a height field under a body that does not tilt: no pitch or roll, the slope
+  pull a creep and not a force, and the ground's height reaches the brain only through the
+  planted flags.
 - The reward is forward progress only; the brain is free to drift sideways and turn, and does.
 - The readings above are one machine and three seeds; they do not establish a learning rate,
   an efficiency, or a property of the library.

@@ -22,11 +22,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .body import DEFAULT_MUSCLES, MUSCLES
+from .body import ARENAS, DEFAULT_MUSCLES, MUSCLES
 from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
-from .life import (BACKWARD_PAY, DRIFT, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
-                   MUSCLE_RATE, STRICT, Life, checked_course)
+from .life import (BACKWARD_PAY, DRIFT, SLOPE_PULL, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
+                   ARENA, MUSCLE_RATE, STRICT, Life, checked_course)
 from .senses import PER, Senses
 
 
@@ -47,7 +47,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water, old_ground=args.old_ground,
                 pay_per_metre=args.pay_per_metre, muscles=args.muscles, backward_pay=args.backward_pay,
                 course=args.course, layout=args.layout, drift=args.drift, strict=args.strict,
-                muscle_rate=args.muscle_rate)
+                muscle_rate=args.muscle_rate, arena=args.arena,
+                slope_pull=args.slope_pull)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -166,6 +167,12 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
     parser.add_argument("--muscle-rate", type=float, default=MUSCLE_RATE,
                         help=f"a factor on both joint rates: how far a joint runs toward its command in one moment "
                              f"(default {MUSCLE_RATE}; the body's, set and saved with the law)")
+    parser.add_argument("--arena", choices=ARENAS, default=ARENA,
+                        help=f"the ground: flat, hills, a fixed rolling terrain, or steep, the same half as high again (default {ARENA}; the world's, "
+                             f"set and saved with the law)")
+    parser.add_argument("--slope-pull", type=float, default=SLOPE_PULL,
+                        help=f"the terrain's pull downhill: metres a second the body creeps down the slope under it "
+                             f"at a slope of 1, planted or not (default {SLOPE_PULL}; 0 = none; nothing on flat ground)")
     parser.add_argument("--drift", type=float, default=DRIFT,
                         help=f"the world's current: metres a second the body loses backward along its heading every "
                              f"moment, planted or not (default {DRIFT}; 0 = still ground)")

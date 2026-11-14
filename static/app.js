@@ -55,23 +55,62 @@ sun.shadow.camera.right = sun.shadow.camera.top = 3;
 scene.add(sun);
 
 const GROUND_COLOUR = '#1b2230';                      // the page's own; the view panel changes it, for this browser only
-const ground = new THREE.Mesh(new THREE.CircleGeometry(5.5, 96), new THREE.MeshStandardMaterial({ color: GROUND_COLOUR, roughness: 1 }));
+// The ground's height, the body's ground_height: 0 on the flat arena, the sum of the server's
+// waves (wavelength, direction, amplitude, phase) on the hills and the steep hills. The page draws the server's terrain;
+// it never has one of its own.
+let waves = [];
+function setArena(name, terrains) {
+  waves = ((terrains || {})[name] || []).map(([w, d, a, ph]) => [2 * Math.PI / w * Math.cos(d), 2 * Math.PI / w * Math.sin(d), a, ph]);
+}
+function groundHeight(x, y) {
+  let h = 0;
+  for (const [kx, ky, a, ph] of waves) h += a * Math.cos(kx * x + ky * y + ph);
+  return h;
+}
+function lay(geometry, lift) {                        // lifts every vertex of a z-up geometry onto the ground
+  const p = geometry.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setZ(i, groundHeight(p.getX(i), p.getY(i)) + lift);
+  p.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+}
+const ground = new THREE.Mesh(new THREE.RingGeometry(0.001, 5.5, 160, 110), new THREE.MeshStandardMaterial({ color: GROUND_COLOUR, roughness: 1 }));
 ground.receiveShadow = true;
 scene.add(ground);
 const GRID_COLOUR = '#262e3c';                        // the page's own; the two axes through the origin a shade lighter
-let grid = null;
-function makeGrid(hex) {                              // GridHelper bakes its colours into the geometry: recolouring is rebuilding
+let grid = null, gridHex = GRID_COLOUR;
+function makeGrid(hex) {                              // the lines follow the ground: built from short segments, rebuilt to recolour
+  gridHex = hex;
   if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
-  const axes = new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), 0.12);
-  grid = new THREE.GridHelper(10, 40, axes, hex);
-  grid.rotation.x = Math.PI / 2;                      // GridHelper is y-up by default
-  grid.position.z = 0.001;
+  const line = new THREE.Color(hex), axes = new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), 0.12);
+  const pos = [], col = [], STEP = 0.05;
+  for (let i = -20; i <= 20; i++) {
+    const c = i === 0 ? axes : line, u = i * 0.25;
+    for (let t = -5; t < 5 - 1e-9; t += STEP) {
+      for (const [x0, y0, x1, y1] of [[t, u, t + STEP, u], [u, t, u, t + STEP]]) {
+        pos.push(x0, y0, groundHeight(x0, y0) + 0.001, x1, y1, groundHeight(x1, y1) + 0.001);
+        col.push(c.r, c.g, c.b, c.r, c.g, c.b);
+      }
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  grid = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true }));
   scene.add(grid);
 }
-makeGrid(GRID_COLOUR);
-const rim = new THREE.Mesh(new THREE.RingGeometry(4.98, 5.02, 128), new THREE.MeshBasicMaterial({ color: 0x5ad1ff, side: THREE.DoubleSide }));
-rim.position.z = 0.002;
+const rim = new THREE.Mesh(new THREE.RingGeometry(4.98, 5.02, 256), new THREE.MeshBasicMaterial({ color: 0x5ad1ff, side: THREE.DoubleSide }));
 scene.add(rim);
+let arenaDrawn = null;
+function drawArena(name, terrains) {                     // the ground, its grid and the rim, laid on the arena's terrain
+  if (name === arenaDrawn) return;
+  arenaDrawn = name;
+  setArena(name, terrains);
+  lay(ground.geometry, 0);
+  lay(rim.geometry, 0.002);
+  makeGrid(gridHex);
+}
+drawArena('flat');
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _yUp = new THREE.Vector3(0, 1, 0);
 function placeCylinder(mesh, a, b, radius) {
@@ -207,9 +246,9 @@ function draw(pose) {
     leg.knee.position.copy(_a);
     leg.femur.visible = leg.tibia.visible = leg.knee.visible = true;
     leg.foot.visible = pose.planted[i];
-    leg.foot.position.set(pose.x + c * fx - s * fy, pose.y + s * fx + c * fy, 0.003);
+    leg.foot.position.set(pose.x + c * fx - s * fy, pose.y + s * fx + c * fy, (pose.ground ? pose.ground[i] : 0) + 0.003);
   }
-  const next = new THREE.Vector3(pose.x, pose.y, 0.08);
+  const next = new THREE.Vector3(pose.x, pose.y, groundHeight(pose.x, pose.y) + 0.08);
   if (firstFrame || next.distanceTo(target) > 1.0) {   // a recentre: jump with the spider
     camera.position.sub(target).add(next);
     target.copy(next);
@@ -272,6 +311,8 @@ function describedBy(d) {
   if (lastState) $('law').textContent = law(lastState);
   $('muscles').textContent = (d.muscles || 'rate') + (d.layout === 'leg' ? ', a slot per leg' : '') + (d.setpoints ? ', setpoints sensed' : '') + (d.compass ? ', a compass' : '') + (d.ground ? ', the ground sense' : '');
   const r = d.reward || {};
+  drawArena(r.arena || 'flat', d.terrains || { hills: d.hills });   // a server from before the steep hills sent its one terrain as hills
+  $('arena').value = r.arena || 'flat';
   // The fields are filled from the server's law only when that law is new to the page: a
   // description re-read for another reason (the socket reconnecting) leaves a half-made edit alone.
   const lawNow = JSON.stringify(LAW_KEYS.map(k => r[k]));
@@ -284,6 +325,8 @@ function describedBy(d) {
   }
   $('drift').textContent = r.drift ? `drift ${r.drift} m/s` : 'drift off';
   $('drift').classList.toggle('on', !!r.drift);
+  $('slope_pull').textContent = r.slope_pull ? `slope pull ${r.slope_pull}` + ((r.arena || 'flat') === 'flat' ? ' (flat: none)' : '') : 'slope pull off';
+  $('slope_pull').classList.toggle('on', !!r.slope_pull);
   $('birth-seed').value = d.seed;
   $('birth-muscles').value = d.muscles || 'target';
   $('birth-layout').value = d.layout || 'joint';
@@ -300,8 +343,9 @@ function describedBy(d) {
   $('birth-genes').value = geneWords(genes);
   $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
 }
-const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift', 'strict', 'muscle_rate'];
+const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift', 'strict', 'muscle_rate', 'slope_pull'];
 const DRIFT_DOSE = 0.002;   // m/s: what the drift button switches on when the settings field names no dose
+const SLOPE_DOSE = 0.5;     // m/s at a slope of 1: what the slope pull button switches on when the field names none (unmeasured)
 // The nursery's words for a brain's gene overrides: {gamma: 0.99, arousal: {need: 0}} → "gamma=0.99 arousal.need=0".
 function geneWords(genes, prefix = '') {
   return Object.entries(genes || {}).map(([k, v]) =>
@@ -327,6 +371,8 @@ function law(m) {
   if (r.yaw_pay) parts.push(`yaw ${r.yaw_pay}`);
   if (r.drift) parts.push(`drift ${r.drift} m/s`);
   if (r.muscle_rate !== undefined && r.muscle_rate !== 1) parts.push(`muscles ×${r.muscle_rate}`);
+  if (r.arena && r.arena !== 'flat') parts.push(r.arena);
+  if (r.slope_pull) parts.push(`slope pull ${r.slope_pull}`);
   const changes = described.law_changes ? described.law_changes.length : 0;
   if (changes) parts.push(`a schedule: changed ${changes}×`);
   return parts.join(' · ');
@@ -576,6 +622,19 @@ $('drift').addEventListener('click', async () => {
   const on = !!(described && described.reward && described.reward.drift);
   const dose = num($('law-drift')) > 0 ? Number($('law-drift').value) : DRIFT_DOSE;
   if (await control({ op: 'law', value: { drift: on ? 0 : dose } })) refreshDescription();
+});
+// The arena select: the ground is the world's law, unlike the colours below it, so a change is a
+// law change on the living brain and makes the life a schedule.
+$('arena').addEventListener('change', async (e) => {
+  const was = (described && described.reward && described.reward.arena) || 'flat';
+  if (await control({ op: 'law', value: { arena: e.target.value } })) refreshDescription();
+  else e.target.value = was;
+});
+// The slope pull button: off → on at the dose the settings field names (or 0.5), on → off.
+$('slope_pull').addEventListener('click', async () => {
+  const on = !!(described && described.reward && described.reward.slope_pull);
+  const dose = num($('law-slope_pull')) > 0 ? Number($('law-slope_pull').value) : SLOPE_DOSE;
+  if (await control({ op: 'law', value: { slope_pull: on ? 0 : dose } })) refreshDescription();
 });
 $('apply-law').addEventListener('click', async () => {
   const value = {};

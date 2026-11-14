@@ -800,3 +800,47 @@ def test_a_life_saved_with_the_old_motor_names_loads_with_its_muscles(tmp_path):
     assert again.muscles == "target" and again.body.muscles == "target"
     assert again.muscle_rate == 4.0 and again.body.muscle_rate == 4.0
     assert again.law_changes[0]["law"]["muscle_rate"] == 4.0 and len(again.law_changes) == 1
+
+
+def test_the_arena_is_the_worlds_and_is_set_saved_and_counted_with_the_law(tmp_path):
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs=tmp_path, arena="moon")
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")
+    described = life.describe()
+    assert described["reward"]["arena"] == "flat" and set(described["terrains"]) == {"hills", "steep"} and len(described["terrains"]["steep"]) == 4
+    assert "hills" not in law_text(life.law())
+    for _ in range(5):
+        life.tick()
+    change = life.set_law({"arena": "hills"})
+    assert change["changed"] and life.body.arena == "hills" and len(life.law_changes) == 1
+    assert law_text(life.law()).endswith("hills")
+    with pytest.raises(ValueError):
+        life.set_law({"arena": "moon"})
+    for _ in range(3):
+        life.tick()
+    life.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")      # flat asked for
+    assert again.load()["custody"] == "kept"
+    assert again.arena == "hills" and again.body.arena == "hills" and again.law() == life.law()
+    for _ in range(4):
+        assert again.tick()["pose"] == life.tick()["pose"]
+
+
+def test_the_slope_pull_is_the_worlds_and_is_set_saved_and_counted_with_the_law(tmp_path):
+    with pytest.raises(ValueError):
+        Life("random", seed=0, pace=0, runs=tmp_path, slope_pull=-0.1)
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", arena="steep")
+    assert life.describe()["reward"]["slope_pull"] == 0.0 and "slope pull" not in law_text(life.law())
+    for _ in range(3):
+        life.tick()
+    change = life.set_law({"slope_pull": 0.5})
+    assert change["changed"] and life.body.slope_pull == 0.5 and len(life.law_changes) == 1
+    assert law_text(life.law()).endswith("steep · slope pull 0.5")
+    for _ in range(3):
+        life.tick()
+    life.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")      # no pull asked for
+    assert again.load()["custody"] == "kept"
+    assert again.slope_pull == 0.5 and again.body.slope_pull == 0.5 and again.law() == life.law()
+    for _ in range(4):
+        assert again.tick()["pose"] == life.tick()["pose"]
