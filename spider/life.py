@@ -276,6 +276,8 @@ class Life:
         self.window = law["window"]
         kept = list(getattr(self, "_progress", []))[-self.window:]
         self._progress: deque[float] = deque(kept, maxlen=self.window)   # the last window moments' progress
+        nose = list(getattr(self, "_nose", []))[-self.window:]
+        self._nose: deque[float] = deque(nose, maxlen=self.window)   # the same moments' progress along the nose (the strict course)
 
     def law(self) -> dict[str, Any]:
         """The reward law this life is paid under, the nine settings the flags set, and the
@@ -338,12 +340,7 @@ class Life:
             self.distance_course += along
             self.displacement[0] += dx
             self.displacement[1] += dy
-            if self.course is None:
-                advance = outcome["progress"]
-            elif self.strict:                   # the lesser of the two measures: nose first on the course, or less
-                advance = min(along, outcome["progress"])
-            else:
-                advance = along
+            advance = outcome["progress"] if self.course is None else along
             if self.high_water:
                 # new ground only: a step back and the same step forward again earn nothing,
                 # unless the mark leaks, when the rest of the progress is paid at the old-ground share
@@ -353,7 +350,14 @@ class Life:
             else:
                 gained = advance
             self._progress.append(gained)
+            self._nose.append(outcome["progress"])
             paid = sum(self._progress) / self.window    # short of a full window the missing moments count as zero
+            if self.strict and self.course is not None:
+                # the lesser of the two measures over the window, not the lesser each moment: a stride
+                # sways, and the lesser of two swaying measures is negative on average even when both
+                # are positive over the stride (seen on the page's life, 2026-11-14); the window is the
+                # stride's, and with window 1 the two orders are the same
+                paid = min(paid, sum(self._nose) / self.window)
             self.reward = pay(paid, outcome["stance"], self.stance_pay,
                               outcome["turn"], self.yaw_pay, self.pay_per_metre, self.backward_pay)
             self.turned += abs(outcome["turn"])
@@ -586,6 +590,7 @@ class Life:
                 "recentres": self.recentres,
                 "world": self.body.state_dict(),
                 "progress_window": list(self._progress),
+                "nose_window": list(self._nose),
                 "blocks": list(self.blocks),
                 "saved_at": time.time(),
             }
@@ -663,6 +668,7 @@ class Life:
                     if self.senses.setpoints and self.motors != "target":
                         raise ValueError(f"{self.brain_file}: the setpoint senses need target motors, the saved life has {self.motors}")
                 self._progress = deque([float(v) for v in state.get("progress_window", [])][-self.window:], maxlen=self.window)
+                self._nose = deque([float(v) for v in state.get("nose_window", [])][-self.window:], maxlen=self.window)
                 self.blocks = deque(state.get("blocks", []), maxlen=BLOCKS_KEPT)
                 if state.get("cadence") != CADENCE_VERSION:
                     self.notes.append(f"saved with cadence {state.get('cadence')}, running {CADENCE_VERSION}")
@@ -735,6 +741,7 @@ class Life:
             self.blocks.clear()
             self._block = []
             self._progress.clear()
+            self._nose.clear()
             self.law_changes = []
             self._last_save = time.monotonic()
             self.last_save_at = None

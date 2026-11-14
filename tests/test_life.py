@@ -733,3 +733,30 @@ def test_the_strict_course_pays_nose_first_on_the_course_only(tmp_path):
     again.load()
     assert again.strict is True and again.course == 0.0 and len(again.law_changes) == 3
 
+
+def test_the_strict_course_takes_the_lesser_over_the_window_not_each_moment(tmp_path):
+    """A stride sways: the body's speed along its nose and along the course alternate in sign
+    within one step while both are positive over it. The lesser of the two each moment is
+    negative on average; the lesser of the two window means is not. With window 1 the orders
+    are the same."""
+    import math
+
+    def earned(window):
+        life = Life("random", seed=0, pace=0, runs=tmp_path, course=0.0, strict=True, backward_pay=1.0, window=window)
+        life.policy = RecordingPolicy()
+        life.body.heading = 1.0                              # nose first, well off the course
+        for i in range(40):
+            # a sway: forward with a lurch to one side, back with a lurch to the other; net forward
+            # along the nose and net along the course, but the two measures' signs never agree
+            life.body.vx, life.body.vy = (0.2, 0.3) if i % 2 == 0 else (-0.1, -0.3)
+            life.tick()
+        return sum(r for r in life.policy.rewards if r is not None), life
+
+    each, life = earned(1)
+    over, _ = earned(2)
+    assert life.distance_forward > 0 and life.distance_course > 0   # net forward and net along the course
+    assert each < 0 < over                                   # the moment's lesser charges a net-forward stride; the window's pays it
+    life.save()
+    again = Life("random", seed=0, pace=0, runs=tmp_path, course=0.0, strict=True, backward_pay=1.0, window=2)
+    assert len(again._nose) == 0
+

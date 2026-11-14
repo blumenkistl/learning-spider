@@ -24,13 +24,18 @@ python3 -m venv .venv
 Currently best results with:
 
 ```sh
-.venv/bin/python server.py --gene gamma=0.99 --gene entropy=0.1 --gene arousal.need=0.1
+.venv/bin/python server.py --gene gamma=0.99 --gene entropy=0.1 --gene arousal.need=0.1 --compass --ground --backward-pay 1
 ```
 
-(Genes are set at birth: these take effect on a newborn, not on a life continued from `runs/`;
-on the page, the same words in the "next birth" gene field and Reset. Measured 2026-11-13:
-4–8 forward metres over 30,000 moments on seeds 0–2, all three still walking and learning at
-150,000, against 0.2–1.5 m for the founder genes; the walk circles.)
+and, once the newborn walks (about 50,000 moments), on the page's law panel: `course` ticked
+(the heading it holds then), Apply law. (Genes and senses are set at birth: these take effect
+on a newborn, not on a life continued from `runs/`; on the page, the same words in the "next
+birth" gene field, the compass and ground boxes, and Reset. Measured 2026-11-14 on seeds 0–2:
+every life finds its course within 100,000 moments of the change and walks 28–41 m along it
+over the next 150,000, 32–56 m from its birth point at 300,000; the founder genes alone make
+0.2–1.5 m in 30,000. Four of six went nose first, two tail first; the strict course, which
+asks for nose first, cut the course eightfold and stays off. `--gene history_decays=0,0.7`
+beside them helped in the early phases and not later.)
 
 Open http://127.0.0.1:8080.
 
@@ -322,7 +327,12 @@ points, and a raised brain on the page learned to go down its course tail first 
 moments, 136 m from birth, the forward metres falling while the course metres rose); under
 the strict course that is backward along the nose, free or charged as `--backward-pay` says,
 nose first off the course pays little, and only nose first on the course pays in full. It is
-not a hint: the same outcome measured twice, the lesser paid. It needs a course (set without
+not a hint: the same outcome measured twice, the lesser paid. The lesser is taken of the two
+window means, not of the two measures each moment: a stride sways, and the lesser of two
+swaying measures is negative on average even when both are positive over the stride (the
+page's life of 2026-11-14 was charged 0.06–0.16 a moment while walking nose first a little off
+its course; until that day the lesser was taken each moment, which is the same under window 1),
+so under the strict course `--window` should be the stride's length, 8 to 20. It needs a course (set without
 one it is refused; a course switched off switches it off) and is set live on the page's law
 panel like the rest, shown on the law line as `strict`, saved and loaded with the life. The
 default stays off.
