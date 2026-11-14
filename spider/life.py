@@ -52,14 +52,14 @@ SLOPE_PULL = 0.0        # m/s downhill at a slope of 1 on the terrains: the worl
                         # under the body's centre, planted or not (README, "The hills"); 0 = none, the founder
 STANCE_FLOOR = LEGS // 2   # feet the world wants on the ground through every moment: half of them
 STANCE_PAY = 0.0        # taken per foot short of the floor: a hint, shaping, not an outcome; off by default,
-                        # 0.1 is the measured dose (README, "The stance term"); --stance-pay / STANCE_PAY set it
+                        # 0.1 is the measured dose (on an earlier body); --stance-pay / STANCE_PAY set it
 PROGRESS_WINDOW = 1     # moments the progress term is averaged over: 1 pays each moment's own progress;
                         # a window pays the mean over the last N, which a sway that nets nothing cannot earn
-                        # (README, "The rocking"); --window / PROGRESS_WINDOW set it
+                        # (measured on an earlier body); --window / PROGRESS_WINDOW set it
 HIGH_WATER = False      # pay only new ground: progress beyond the farthest point the body has reached along
                         # its heading (its high-water mark). A sway earns on its forward half under the plain
                         # law and nothing under this one; the mark is the life's, saved and loaded with it
-                        # (README, "The high-water mark"); --high-water / HIGH_WATER switch it on
+                        # (README, "The leaking mark"); --high-water / HIGH_WATER switch it on
 OLD_GROUND = 0.0        # under the mark, the share of a moment's progress on old ground that is paid: 0 is the
                         # mark as above, 1 the plain law; between, the mark leaks (README, "The leaking mark");
                         # --old-ground / OLD_GROUND set it

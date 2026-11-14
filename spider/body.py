@@ -98,7 +98,7 @@ KNEE_RATE = 2.5
 CONTACT_Z = 0.005                       # a foot this close to the ground is planted
 SUPPORT_SIDE = 1                        # planted feet a side needs for the body to stand ...
 SUPPORT_MIN = 3                         # ... and in all: one side's feet alone cannot hold it up (2026-11-12; two
-                                        # feet anywhere until then, "The support rule" in the README)
+                                        # feet anywhere until then, measured on an earlier body)
 GRIP = 10.0                             # 1/s: how fast the body takes the speed its feet impose
 SLIDE = 6.0                             # 1/s: velocity decay while the body is down
 ARENA_RADIUS = 5.0                      # beyond this the spider is recentred (not a reset)
@@ -192,7 +192,7 @@ def kinematics(joints: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     # fixed, so the press lifts nothing, and the foot stays where a resting knee puts it. Until
     # 2026-11-12 the pressed leg touched the ground where the tibia crossed the plane, a point
     # that slid in under the knee as the press deepened; the learner rocked on that slide for
-    # a forward-only income without moving (README, "The rocking").
+    # a forward-only income without moving (measured on an earlier body).
     beta = TIBIA_REST + np.maximum(joints[:, 1], 0.0)
     d = np.stack([np.sin(theta), SIDE * np.cos(theta), np.zeros(LEGS)], axis=1)
     up = np.array([0.0, 0.0, 1.0])

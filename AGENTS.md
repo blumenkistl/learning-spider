@@ -42,7 +42,7 @@ without a page, for measurement.
   Two such terms exist in `spider/life.py`: every foot short of four planted through the
   moment takes `STANCE_PAY` (off by default; 0.1 is the measured dose), and every radian turned takes `YAW_PAY`
   (off by default: no measured dose straightened the course without stopping the walk).
-  Both are labelled as shaping, their readings are in the README, and `--stance-pay` and
+  Both are labelled as shaping, their doses were measured on an earlier body (readings removed from the README 2026-11-14), and `--stance-pay` and
   `--yaw-pay` in the nursery and the server, or the same names in the server's environment,
   set them. The course law (`--course`, `COURSE`; off by default) is not a hint either: the
   same outcome, the moment's motion, measured along one fixed heading of the world instead of
