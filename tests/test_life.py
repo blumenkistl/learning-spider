@@ -342,40 +342,40 @@ def test_reset_starts_a_new_life_and_removes_the_save(tmp_path):
     assert life.moments == 1
 
 
-def test_a_saved_life_keeps_its_motor_model(tmp_path):
-    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target")
-    assert life.body.motors == "target" and life.describe()["motors"] == "target"
+def test_a_saved_life_keeps_its_muscle_model(tmp_path):
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="target")
+    assert life.body.muscles == "target" and life.describe()["muscles"] == "target"
     for _ in range(12):
         life.tick()
     life.save()
-    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="rate")   # asked for rate motors
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="rate")   # asked for rate muscles
     assert again.load()["custody"] == "kept"
-    assert again.body.motors == "target" and again.motors == "target"          # the saved life keeps its own
-    assert any("target motors" in n for n in again.notes)
+    assert again.body.muscles == "target" and again.muscles == "target"          # the saved life keeps its own
+    assert any("target muscles" in n for n in again.notes)
     assert np.array_equal(again.body.targets, life.body.targets)
     for _ in range(6):
         assert life.tick()["pose"] == again.tick()["pose"]
     again.reset()
-    assert again.body.motors == "target"                                        # a reset keeps the life's model
+    assert again.body.muscles == "target"                                        # a reset keeps the life's model
     with pytest.raises(ValueError):
-        Life("random", seed=0, pace=0, runs="/nonexistent", motors="servo")
+        Life("random", seed=0, pace=0, runs="/nonexistent", muscles="servo")
 
 
-def test_the_setpoint_senses_need_target_motors_and_are_continued(tmp_path):
+def test_the_setpoint_senses_need_target_muscles_and_are_continued(tmp_path):
     from spider.senses import Senses
 
     with pytest.raises(ValueError):
-        Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="rate", senses=Senses(setpoints=True))
-    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target", senses=Senses(setpoints=True))
+        Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="rate", senses=Senses(setpoints=True))
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="target", senses=Senses(setpoints=True))
     assert life.describe()["setpoints"] is True and life.describe()["inputs"] == 8 * 34 + 8
     for _ in range(12):
         life.tick()
     life.save()
-    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target", senses=Senses(setpoints=True))
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="target", senses=Senses(setpoints=True))
     assert again.load()["custody"] == "kept"
     for _ in range(6):
         assert life.tick()["pose"] == again.tick()["pose"]
-    plain = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motors="target")
+    plain = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="target")
     assert plain.load()["custody"] == "kept" and plain.senses.setpoints is True   # the sidecar names the senses
 
 
@@ -431,18 +431,18 @@ def test_the_law_changes_live_and_is_noted_counted_and_saved(tmp_path):
 
 
 def test_reset_takes_a_birth(tmp_path):
-    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", motors="rate")
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", muscles="rate")
     life.tick()
     with pytest.raises(ValueError):
-        life.reset({"setpoints": True})                          # setpoints need target motors
+        life.reset({"setpoints": True})                          # setpoints need target muscles
     with pytest.raises(ValueError):
         life.reset({"genes": "gamma"})
     with pytest.raises(ValueError):
         life.reset({"law": {}})
-    report = life.control("reset", {"seed": 3, "genes": "eta_critic=20 gamma=0.99", "motors": "target", "setpoints": True})
+    report = life.control("reset", {"seed": 3, "genes": "eta_critic=20 gamma=0.99", "muscles": "target", "setpoints": True})
     assert report["seed"] == 3 and report["genes"] == {"eta_critic": 20, "gamma": 0.99}
     described = life.describe()
-    assert described["seed"] == 3 and described["motors"] == "target" and described["setpoints"] is True
+    assert described["seed"] == 3 and described["muscles"] == "target" and described["setpoints"] is True
     assert described["brain"]["genes"]["actor_eta_critic"] == 20 and described["brain"]["genes"]["actor_gamma"] == 0.99
     assert described["genes"] == {"eta_critic": 20, "gamma": 0.99}
     assert life.moments == 0 and "seed 3" in life.notes[0] and "setpoints sensed" in life.notes[0]
@@ -455,16 +455,16 @@ def test_reset_takes_a_birth(tmp_path):
 def test_a_saved_life_keeps_its_seed_and_senses(tmp_path):
     from spider.senses import Senses
 
-    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", motors="rate")
-    life.control("reset", {"seed": 3, "motors": "target", "setpoints": True, "genes": "gamma=0.99"})
+    life = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", muscles="rate")
+    life.control("reset", {"seed": 3, "muscles": "target", "setpoints": True, "genes": "gamma=0.99"})
     for _ in range(4):
         life.tick()
     life.save()
-    plain = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", motors="rate")   # the flags name another birth
+    plain = Life("brain", seed=0, pace=0.0, runs=tmp_path, backend="cpu", muscles="rate")   # the flags name another birth
     assert plain.load()["custody"] == "kept"
-    assert plain.seed == 3 and plain.motors == "target" and plain.senses.setpoints is True and plain.genes == {"gamma": 0.99}
+    assert plain.seed == 3 and plain.muscles == "target" and plain.senses.setpoints is True and plain.genes == {"gamma": 0.99}
     assert plain.describe()["inputs"] == life.describe()["inputs"]
-    assert sum("keeps its own" in note for note in plain.notes) == 3        # seed, senses, motors
+    assert sum("keeps its own" in note for note in plain.notes) == 3        # seed, senses, muscles
     for _ in range(3):
         assert life.tick()["pose"] == plain.tick()["pose"]
 
@@ -762,19 +762,41 @@ def test_the_strict_course_takes_the_lesser_over_the_window_not_each_moment(tmp_
 
 
 
-def test_the_motor_rate_is_the_bodys_and_is_set_saved_and_counted_with_the_law(tmp_path):
-    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motor_rate=1.5)
-    assert life.body.motor_rate == 1.5 and life.describe()["reward"]["motor_rate"] == 1.5
-    assert "motors ×1.5" in law_text(life.law())
+def test_the_muscle_rate_is_the_bodys_and_is_set_saved_and_counted_with_the_law(tmp_path):
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscle_rate=1.5)
+    assert life.body.muscle_rate == 1.5 and life.describe()["reward"]["muscle_rate"] == 1.5
+    assert "muscles ×1.5" in law_text(life.law())
     for _ in range(5):
         life.tick()
-    change = life.set_law({"motor_rate": 2.0})
-    assert change["changed"] and life.body.motor_rate == 2.0 and len(life.law_changes) == 1
+    change = life.set_law({"muscle_rate": 2.0})
+    assert change["changed"] and life.body.muscle_rate == 2.0 and len(life.law_changes) == 1
     life.save()
     again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")   # asked for the founder rate
     again.load()
-    assert again.motor_rate == 2.0 and again.body.motor_rate == 2.0       # the saved life keeps its own
-    assert any("motors ×2" in n for n in again.notes)
+    assert again.muscle_rate == 2.0 and again.body.muscle_rate == 2.0       # the saved life keeps its own
+    assert any("muscles ×2" in n for n in again.notes)
     with pytest.raises(ValueError):
-        life.set_law({"motor_rate": 0})
-    assert "motors" not in law_text(Life("random", seed=0, pace=0, runs=tmp_path).law())
+        life.set_law({"muscle_rate": 0})
+    assert "muscles" not in law_text(Life("random", seed=0, pace=0, runs=tmp_path).law())
+
+
+def test_a_life_saved_with_the_old_motor_names_loads_with_its_muscles(tmp_path):
+    """A save written before 2026-11-14 names the muscles ``motors`` and their rate ``motor_rate``,
+    in the world, the law and its recorded changes: it continues with its own muscles and rate."""
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="target", muscle_rate=3.0)
+    for _ in range(3):
+        life.tick()
+    life.set_law({"muscle_rate": 4.0})
+    life.save()
+    state = json.loads(life.sidecar.read_text())
+    world = state["world"]
+    world["motors"] = world.pop("muscles")
+    world["motor_rate"] = world.pop("muscle_rate")
+    for law in [state["law"]] + [c["law"] for c in state["law_changes"]]:
+        law["motor_rate"] = law.pop("muscle_rate")
+    life.sidecar.write_text(json.dumps(state))
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", muscles="rate")
+    again.load()
+    assert again.muscles == "target" and again.body.muscles == "target"
+    assert again.muscle_rate == 4.0 and again.body.muscle_rate == 4.0
+    assert again.law_changes[0]["law"]["muscle_rate"] == 4.0 and len(again.law_changes) == 1

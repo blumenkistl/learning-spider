@@ -27,7 +27,7 @@ from typing import Any
 
 import numpy as np
 
-from .body import DEFAULT_MOTORS, DT, HEIGHT, HIPS, JOINTS, LEGS, MOTORS, Spider
+from .body import DEFAULT_MUSCLES, DT, HEIGHT, HIPS, JOINTS, LEGS, MUSCLES, Spider
 from .brain import (DEFAULT_LAYOUT, LAYOUTS, FrozenPolicy, RandomPolicy, SpiderBrain, backend_of, fitted, gene_words,
                     genes_from_text, make_policy)
 from .senses import DEFAULT as DEFAULT_SENSES, Senses
@@ -42,9 +42,9 @@ BACKWARD_PAY = 0.0      # the share of the pay per metre charged for a metre bac
 DRIFT = 0.0             # the world's current, metres a second the body loses backward along its heading
                         # every moment, planted or not: the world's, not a term of the pay; 0 is still
                         # ground (the founder); --drift / DRIFT set it (README, "The drift")
-MOTOR_RATE = 1.0        # a factor on both joint rates: how far a joint runs toward its command in one moment
+MUSCLE_RATE = 1.0        # a factor on both joint rates: how far a joint runs toward its command in one moment
                         # (the body's, not a controller; 1 is the founder body); set, shown, saved and counted
-                        # with the law like the drift; --motor-rate / MOTOR_RATE set it (README, "The motor rate")
+                        # with the law like the drift; --muscle-rate / MUSCLE_RATE set it (README, "The muscle rate")
 STANCE_FLOOR = LEGS // 2   # feet the world wants on the ground through every moment: half of them
 STANCE_PAY = 0.0        # taken per foot short of the floor: a hint, shaping, not an outcome; off by default,
                         # 0.1 is the measured dose (README, "The stance term"); --stance-pay / STANCE_PAY set it
@@ -113,8 +113,16 @@ def _replace(path: Path, write) -> None:
             os.unlink(tmp)
 
 
+def _renamed(state: dict[str, Any]) -> None:
+    """A sidecar written before 2026-11-14 names the muscle rate ``motor_rate``: read it as the
+    ``muscle_rate`` it is, in the law and in every recorded change of it."""
+    for law in [state.get("law")] + [c.get("law") for c in state.get("law_changes", []) if isinstance(c, dict)]:
+        if isinstance(law, dict) and "motor_rate" in law:
+            law.setdefault("muscle_rate", law.pop("motor_rate"))
+
+
 LAW_KEYS = ("stance_pay", "yaw_pay", "window", "high_water", "old_ground", "pay_per_metre", "backward_pay", "course",
-            "drift", "strict", "motor_rate")
+            "drift", "strict", "muscle_rate")
 
 
 def checked_course(course: Any) -> float | None:
@@ -139,15 +147,15 @@ def checked_course(course: Any) -> float | None:
 def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window: Any = PROGRESS_WINDOW,
                 high_water: Any = HIGH_WATER, old_ground: Any = OLD_GROUND, pay_per_metre: Any = PROGRESS_PAY,
                 backward_pay: Any = BACKWARD_PAY, course: Any = COURSE, drift: Any = DRIFT,
-                strict: Any = STRICT, motor_rate: Any = MOTOR_RATE) -> dict[str, Any]:
+                strict: Any = STRICT, muscle_rate: Any = MUSCLE_RATE) -> dict[str, Any]:
     """The law's eleven settings, typed and checked; a ValueError names what is wrong. The
     drift is the world's and not the pay's, but it is set, shown, saved and counted with the
     law, so that a life whose world changed reads as the schedule it is."""
     high_water = bool(high_water)
     if not math.isfinite(float(drift)) or float(drift) < 0:
         raise ValueError(f"the drift is a speed backward in m/s, 0 or more, not {drift}")
-    if not math.isfinite(float(motor_rate)) or float(motor_rate) <= 0:
-        raise ValueError(f"the motor rate is a positive factor on the joint rates, not {motor_rate}")
+    if not math.isfinite(float(muscle_rate)) or float(muscle_rate) <= 0:
+        raise ValueError(f"the muscle rate is a positive factor on the joint rates, not {muscle_rate}")
     if not 0.0 <= float(old_ground) <= 1.0:
         raise ValueError(f"old ground is a share of the pay, 0 to 1, not {old_ground}")
     if float(old_ground) and not high_water:
@@ -165,7 +173,7 @@ def checked_law(*, stance_pay: Any = STANCE_PAY, yaw_pay: Any = YAW_PAY, window:
     return {"stance_pay": float(stance_pay), "yaw_pay": float(yaw_pay), "window": int(window),
             "high_water": high_water, "old_ground": float(old_ground),
             "pay_per_metre": float(pay_per_metre), "backward_pay": float(backward_pay),
-            "course": course, "drift": float(drift), "strict": strict, "motor_rate": float(motor_rate)}
+            "course": course, "drift": float(drift), "strict": strict, "muscle_rate": float(muscle_rate)}
 
 
 def law_text(law: dict[str, Any]) -> str:
@@ -185,8 +193,8 @@ def law_text(law: dict[str, Any]) -> str:
         parts.append(f"yaw {law['yaw_pay']:g}")
     if law.get("drift"):
         parts.append(f"drift {law['drift']:g} m/s")
-    if law.get("motor_rate", 1.0) != 1.0:
-        parts.append(f"motors ×{law['motor_rate']:g}")
+    if law.get("muscle_rate", 1.0) != 1.0:
+        parts.append(f"muscles ×{law['muscle_rate']:g}")
     return " · ".join(parts)
 
 
@@ -209,19 +217,19 @@ class Life:
         window: int = PROGRESS_WINDOW,
         high_water: bool = HIGH_WATER,
         pay_per_metre: float = PROGRESS_PAY,
-        motors: str = DEFAULT_MOTORS,
+        muscles: str = DEFAULT_MUSCLES,
         backward_pay: float = BACKWARD_PAY,
         old_ground: float = OLD_GROUND,
         course: float | bool | None = COURSE,
         layout: str = DEFAULT_LAYOUT,
         drift: float = DRIFT,
         strict: bool = STRICT,
-        motor_rate: float = MOTOR_RATE,
+        muscle_rate: float = MUSCLE_RATE,
     ) -> None:
         self.name = name                        # the file stem under runs/
         self._take_law(checked_law(stance_pay=stance_pay, yaw_pay=yaw_pay, window=window, high_water=high_water,
                                    old_ground=old_ground, pay_per_metre=pay_per_metre, backward_pay=backward_pay,
-                                   course=course, drift=drift, strict=strict, motor_rate=motor_rate))
+                                   course=course, drift=drift, strict=strict, muscle_rate=muscle_rate))
         self.mark = 0.0                         # the farthest paid distance reached: the high-water mark
         self.law_changes: list[dict[str, Any]] = []   # every live change of the law, moment and law (a schedule)
         self.seed = int(seed)
@@ -231,12 +239,12 @@ class Life:
         self.runs = Path(runs)
         self.pace = float(pace)                 # moments per second; 0 = as fast as possible
         self.rate = 0.0                         # moments a second the loop actually makes, smoothed
-        if motors not in MOTORS:
-            raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
-        self.motors = str(motors)               # the body's motor model, the life's own; a saved life keeps its own
-        if senses.setpoints and self.motors != "target":
-            raise ValueError("the setpoint senses need target motors (--motors target)")
-        self.body = Spider(motors=self.motors, drift=self.drift, motor_rate=self.motor_rate)
+        if muscles not in MUSCLES:
+            raise ValueError(f"muscles must be one of {MUSCLES}, not {muscles!r}")
+        self.muscles = str(muscles)               # the body's muscle model, the life's own; a saved life keeps its own
+        if senses.setpoints and self.muscles != "target":
+            raise ValueError("the setpoint senses need target muscles (--muscles target)")
+        self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate)
         if layout not in LAYOUTS:
             raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
         self.layout = str(layout)               # how the brain's answer is read, a slot per joint or per leg; the
@@ -279,10 +287,10 @@ class Life:
         self.course = law["course"]             # None pays along the body's own heading, a number along this one
         self.drift = law["drift"]               # the world's current, which the body applies each moment
         self.strict = law["strict"]             # under a course: the lesser of along the course and along the nose
-        self.motor_rate = law["motor_rate"]     # the body's joint rates, as a factor: how far a joint runs in a moment
+        self.muscle_rate = law["muscle_rate"]     # the body's joint rates, as a factor: how far a joint runs in a moment
         if hasattr(self, "body"):
             self.body.drift = self.drift
-            self.body.motor_rate = self.motor_rate
+            self.body.muscle_rate = self.muscle_rate
         self.window = law["window"]
         kept = list(getattr(self, "_progress", []))[-self.window:]
         self._progress: deque[float] = deque(kept, maxlen=self.window)   # the last window moments' progress
@@ -295,7 +303,7 @@ class Life:
         return {"stance_pay": self.stance_pay, "yaw_pay": self.yaw_pay, "window": self.window,
                 "high_water": self.high_water, "old_ground": self.old_ground,
                 "pay_per_metre": self.pay_per_metre, "backward_pay": self.backward_pay, "course": self.course,
-                "drift": self.drift, "strict": self.strict, "motor_rate": self.motor_rate}
+                "drift": self.drift, "strict": self.strict, "muscle_rate": self.muscle_rate}
 
     def _paid_distance(self) -> float:
         """The distance the progress term is measured on: along the course under the course law,
@@ -616,6 +624,8 @@ class Life:
         with self.lock:
             state = json.loads(self.sidecar.read_text()) if self.sidecar.exists() else None
             if state is not None:
+                _renamed(state)
+            if state is not None:
                 if state.get("format") != FORMAT:
                     raise ValueError(f"{self.sidecar}: unknown format {state.get('format')!r}")
                 # the seed and the senses are the life's too (a page's birth names them): a life
@@ -672,12 +682,12 @@ class Life:
                         self.notes.append(f"saved without a displacement after {self.recentres} recentres: "
                                           "it starts where the body stands")
                 self.body.drift = self.drift    # the law's, which the sidecar's law set above
-                self.body.motor_rate = self.motor_rate
-                if self.body.motors != self.motors:
-                    self.notes.append(f"saved with {self.body.motors} motors, asked for {self.motors}: the saved life keeps its own")
-                    self.motors = self.body.motors
-                    if self.senses.setpoints and self.motors != "target":
-                        raise ValueError(f"{self.brain_file}: the setpoint senses need target motors, the saved life has {self.motors}")
+                self.body.muscle_rate = self.muscle_rate
+                if self.body.muscles != self.muscles:
+                    self.notes.append(f"saved with {self.body.muscles} muscles, asked for {self.muscles}: the saved life keeps its own")
+                    self.muscles = self.body.muscles
+                    if self.senses.setpoints and self.muscles != "target":
+                        raise ValueError(f"{self.brain_file}: the setpoint senses need target muscles, the saved life has {self.muscles}")
                 self._progress = deque([float(v) for v in state.get("progress_window", [])][-self.window:], maxlen=self.window)
                 self._nose = deque([float(v) for v in state.get("nose_window", [])][-self.window:], maxlen=self.window)
                 self.blocks = deque(state.get("blocks", []), maxlen=BLOCKS_KEPT)
@@ -688,7 +698,7 @@ class Life:
                 # the brain's pending command is known, its outcome is not: it reads as an
                 # observed zero at the next moment, which is a break in custody, reported
                 self.reward = None
-                self.body = Spider(motors=self.motors, drift=self.drift, motor_rate=self.motor_rate)
+                self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate)
                 custody = "broken: no sidecar, the pending outcome is lost"
                 self.notes.append(custody)
             self._block = []
@@ -703,31 +713,31 @@ class Life:
         continuing life, taken only on the page's Reset after the person confirmed it.
 
         ``birth`` names the newborn: ``seed``, ``genes`` (overrides, a dict or the nursery's
-        ``name=value`` words in one string), ``motors``, ``layout``, ``setpoints``, ``compass`` and
+        ``name=value`` words in one string), ``muscles``, ``layout``, ``setpoints``, ``compass`` and
         ``ground``; what it leaves out stays as the life had it. Genes are composed once, at birth, which is why
         they are set here and nowhere else. The law is the life's and stays as it is; under
         the course law the distance along the course and the mark start at zero."""
         birth = dict(birth or {})
-        unknown = sorted(set(birth) - {"seed", "genes", "motors", "layout", "setpoints", "compass", "ground"})
+        unknown = sorted(set(birth) - {"seed", "genes", "muscles", "layout", "setpoints", "compass", "ground"})
         if unknown:
-            raise ValueError(f"a birth names seed, genes, motors, layout, setpoints, compass and ground, not {', '.join(unknown)}")
+            raise ValueError(f"a birth names seed, genes, muscles, layout, setpoints, compass and ground, not {', '.join(unknown)}")
         seed = int(birth.get("seed", self.seed))
         genes = birth.get("genes", self.genes)
         if isinstance(genes, str):
             genes = genes_from_text(genes) or None
         elif genes is not None and not isinstance(genes, dict):
             raise ValueError("genes are name=value words or an object")
-        motors = str(birth.get("motors", self.motors))
-        if motors not in MOTORS:
-            raise ValueError(f"motors must be one of {MOTORS}, not {motors!r}")
+        muscles = str(birth.get("muscles", self.muscles))
+        if muscles not in MUSCLES:
+            raise ValueError(f"muscles must be one of {MUSCLES}, not {muscles!r}")
         layout = str(birth.get("layout", self.layout))
         if layout not in LAYOUTS:
             raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
         setpoints = bool(birth.get("setpoints", self.senses.setpoints))
         compass = bool(birth.get("compass", self.senses.compass))
         ground = bool(birth.get("ground", self.senses.ground))
-        if setpoints and motors != "target":
-            raise ValueError("the setpoint senses need target motors")
+        if setpoints and muscles != "target":
+            raise ValueError("the setpoint senses need target muscles")
         senses = self.senses if (setpoints, compass, ground) == (self.senses.setpoints, self.senses.compass, self.senses.ground) \
             else Senses(per=self.senses.per, setpoints=setpoints, compass=compass, ground=ground)
         newborn = make_policy("brain", seed, None, genes, self.backend, inputs=senses.inputs, layout=layout)   # composed before the old life ends
@@ -736,10 +746,10 @@ class Life:
             for path in (self.brain_file, self.sidecar, self.runs / "frozen-copy.npz"):
                 if path.exists():
                     path.unlink()
-            self.seed, self.genes, self.motors, self.senses, self.layout = seed, genes, motors, senses, layout
+            self.seed, self.genes, self.muscles, self.senses, self.layout = seed, genes, muscles, senses, layout
             self.policy = newborn
             self._brain = None
-            self.body = Spider(motors=self.motors, drift=self.drift, motor_rate=self.motor_rate)
+            self.body = Spider(muscles=self.muscles, drift=self.drift, muscle_rate=self.muscle_rate)
             self.reward = None
             self.moments = 0
             self.distance_forward = 0.0
@@ -757,13 +767,13 @@ class Life:
             self._last_save = time.monotonic()
             self.last_save_at = None
             self.loaded_from = None
-            born = f"seed {self.seed}, {self.motors} motors" + (", a slot per leg" if layout == "leg" else "") \
+            born = f"seed {self.seed}, {self.muscles} muscles" + (", a slot per leg" if layout == "leg" else "") \
                 + (", setpoints sensed" if setpoints else "") \
                 + (", a compass" if compass else "") + (", the ground sense" if ground else "") \
                 + (f", genes {gene_words(genes)}" if genes else ", founder genes")
             self.notes = [f"reset after {was} moments: a newborn brain of {born}"]
             self.latest = self.snapshot(None)
-        return {"reset": True, "moments_before": was, "seed": self.seed, "genes": genes or {}, "motors": self.motors,
+        return {"reset": True, "moments_before": was, "seed": self.seed, "genes": genes or {}, "muscles": self.muscles,
                 "layout": self.layout, "setpoints": setpoints, "compass": compass, "ground": ground}
 
     def _maybe_autosave(self) -> None:
@@ -779,7 +789,7 @@ class Life:
             "seed": self.seed,
             "pace": self.pace,
             "dt": DT,
-            "motors": self.motors,
+            "muscles": self.muscles,
             "layout": self.layout,
             "inputs": self.senses.inputs,
             "setpoints": self.senses.setpoints,

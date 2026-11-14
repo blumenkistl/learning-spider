@@ -62,3 +62,11 @@ button.on { background: #203a4a; border-color: var(--accent); }
 #brainpanel .bv-overlay { color: #a9c4e6; }
 #brainpanel .bv-legend { background: rgba(4, 8, 16, 0.84); border-color: rgba(90, 160, 230, 0.25); }
 #brainpanel .bv-legend em { color: #6f8fb3; }
+/* the wait until the spider moves: shown while the server starts, a newborn is composed or the
+   first moments run; it lets every click through, so the page stays usable behind it */
+#init { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 20; }
+#init.show { opacity: 1; }
+#init .init-box { display: flex; align-items: center; gap: 12px; padding: 16px 24px; border-radius: 10px; background: var(--panel); border: 1px solid rgba(90, 209, 255, 0.3); color: var(--ink); font-size: 16px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5); }
+#init .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid rgba(90, 209, 255, 0.25); border-top-color: var(--accent); animation: init-spin 0.9s linear infinite; }
+@keyframes init-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #init .spinner { animation: none; } }

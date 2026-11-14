@@ -131,10 +131,10 @@ async def test_the_law_and_a_birth_are_controls(client):
     assert r.status == 400
     r = await client.post("/api/control", json={"op": "law", "value": 3})
     assert r.status == 400
-    r = await client.post("/api/control", json={"op": "reset", "value": {"seed": 7, "motors": "target", "genes": "gamma=0.99"}})
+    r = await client.post("/api/control", json={"op": "reset", "value": {"seed": 7, "muscles": "target", "genes": "gamma=0.99"}})
     assert r.status == 200 and (await r.json())["seed"] == 7
     described = await (await client.get("/api/describe")).json()
-    assert described["seed"] == 7 and described["motors"] == "target" and described["genes"] == {"gamma": 0.99}
+    assert described["seed"] == 7 and described["muscles"] == "target" and described["genes"] == {"gamma": 0.99}
     assert described["reward"]["high_water"] is True                # the law is the life's, a birth keeps it
-    r = await client.post("/api/control", json={"op": "reset", "value": {"setpoints": True, "motors": "rate"}})
+    r = await client.post("/api/control", json={"op": "reset", "value": {"setpoints": True, "muscles": "rate"}})
     assert r.status == 400

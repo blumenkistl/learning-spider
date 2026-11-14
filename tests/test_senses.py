@@ -78,13 +78,13 @@ def test_a_saved_brain_for_other_senses_is_refused_at_the_load(tmp_path):
     assert alone.moments == 0 and (tmp_path / "spider.npz").exists()
 
 
-def test_the_setpoint_senses_are_an_option_of_target_motors():
+def test_the_setpoint_senses_are_an_option_of_target_muscles():
     import pytest
 
     senses = Senses(setpoints=True)
     assert senses.inputs == 8 * (18 + 2 * LEGS) + LEGS and len(senses.input_names()) == senses.inputs
     assert any("hip3_set" in n for n in senses.input_names())
-    spider = Spider(motors="target")
+    spider = Spider(muscles="target")
     x = senses.observe(spider)
     assert x.shape == (1, senses.inputs) and np.all(x >= 0.0) and np.all(x <= 1.0)
     readings = senses.readings(spider)
@@ -94,7 +94,7 @@ def test_the_setpoint_senses_are_an_option_of_target_motors():
     spider.step([2] * LEGS * 2)                                   # every joint sent to its high end
     assert np.all(senses.readings(spider)[18:] == spider.targets.reshape(-1, order="F"))
     with pytest.raises(ValueError):
-        senses.readings(Spider(motors="rate"))
+        senses.readings(Spider(muscles="rate"))
     assert not Senses().setpoints and Senses().inputs == INPUTS
 
 
@@ -113,7 +113,7 @@ def test_the_compass_senses_the_heading():
     x = senses.observe(spider)
     assert x.shape == (1, senses.inputs) and np.all(x >= 0.0) and np.all(x <= 1.0)
     both = Senses(setpoints=True, compass=True)
-    assert both.inputs == 8 * 36 + LEGS and both.readings(Spider(motors="target")).shape == (36,)
+    assert both.inputs == 8 * 36 + LEGS and both.readings(Spider(muscles="target")).shape == (36,)
     assert not Senses().compass and Senses().options() == {"per": 8, "setpoints": False, "compass": False, "ground": False}
 
 
@@ -135,7 +135,7 @@ def test_the_ground_sense_reads_the_velocity_over_the_ground():
     x = senses.observe(spider)
     assert x.shape == (1, senses.inputs) and np.all(x >= 0.0) and np.all(x <= 1.0)
     everything = Senses(setpoints=True, compass=True, ground=True)
-    assert everything.inputs == 8 * 38 + LEGS and everything.readings(Spider(motors="target")).shape == (38,)
+    assert everything.inputs == 8 * 38 + LEGS and everything.readings(Spider(muscles="target")).shape == (38,)
     assert everything.input_names()[8 * 34] == "heading_cos@-1.00" and everything.input_names()[8 * 37] == "ground_vy@-0.30"
     # what a step adds to the world position is the ground velocity times DT
     from spider.body import DT

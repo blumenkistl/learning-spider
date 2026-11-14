@@ -117,7 +117,7 @@ def legs_cross(spider, i, j):
 
 def test_neighbouring_legs_stop_against_each_other():
     """Leg 1 swings forward and leg 0 back as far as they can: they meet at the stop, never cross."""
-    spider = Spider(motors="rate")                              # a command a moment, as the test steps it
+    spider = Spider(muscles="rate")                              # a command a moment, as the test steps it
     cmd = hold()
     cmd[0] = 0                             # leg 0's hip back
     cmd[2] = 2                             # leg 1's hip forward
@@ -130,7 +130,7 @@ def test_neighbouring_legs_stop_against_each_other():
     assert spider.joints[0, 0] > HIP_RANGE[0] and spider.joints[1, 0] < HIP_RANGE[1]   # neither reached its range
 
     # the stop is a stop, not a wall: the leg behind may turn forward until it meets the one in front
-    spider = Spider(motors="rate")
+    spider = Spider(muscles="rate")
     cmd = hold()
     cmd[2] = 2
     for _ in range(30):
@@ -184,7 +184,7 @@ def test_left_stroke_turns_right_and_moves_forward():
 
 
 def test_closed_cycle_with_all_feet_planted_nets_nothing():
-    spider = Spider(motors="rate")                              # the cycle is commanded moment by moment
+    spider = Spider(muscles="rate")                              # the cycle is commanded moment by moment
     for _ in range(4):
         spider.step(command(hips=0))
     for _ in range(4):
@@ -280,11 +280,11 @@ def test_rocking_on_a_knee_moves_nothing():
 
 
 
-def test_target_motors_are_servos_with_a_kept_setpoint():
-    """Under target motors one command sets a joint's setpoint to an end of its range and
+def test_target_muscles_are_servos_with_a_kept_setpoint():
+    """Under target muscles one command sets a joint's setpoint to an end of its range and
     hold keeps it: the joint then travels there at its rate over the following moments,
-    where the founder's rate motors need the command every moment."""
-    spider = Spider(motors="target")
+    where the founder's rate muscles need the command every moment."""
+    spider = Spider(muscles="target")
     cmd = hold()
     cmd[0] = cmd[2] = 2                     # legs 0 and 1: hip setpoints to the front end
     spider.step(cmd)
@@ -295,9 +295,9 @@ def test_target_motors_are_servos_with_a_kept_setpoint():
     assert spider.joints[1, 0] == pytest.approx(HIP_RANGE[1])
     assert spider.targets[1, 0] == HIP_RANGE[1]
     # a servo holds its setpoint against the stop: leg 1 sent forward alone against a leg 0
-    # held at rest settles at the stop short of its range, where under rate motors the
+    # held at rest settles at the stop short of its range, where under rate muscles the
     # split pushed the held leg 0 along
-    alone = Spider(motors="target")
+    alone = Spider(muscles="target")
     cmd = hold(); cmd[2] = 2
     alone.step(cmd)
     for _ in range(30):
@@ -317,7 +317,7 @@ def test_target_motors_are_servos_with_a_kept_setpoint():
         spider.step(cmd if _ == 0 else hold())
     assert spider.joints[0, 1] == pytest.approx(KNEE_RANGE[0]) and spider.planted()[0]
     # the leg stop holds under servos too: a setpoint past the stop is not reached
-    spider = Spider(motors="target")
+    spider = Spider(muscles="target")
     cmd = hold(); cmd[0] = 0; cmd[2] = 2
     spider.step(cmd)
     for _ in range(30):
@@ -326,30 +326,30 @@ def test_target_motors_are_servos_with_a_kept_setpoint():
     yaw = SPLAY + spider.joints[:, 0]
     assert yaw[1] - yaw[0] == pytest.approx(LEG_CONVERGE)
 
-    # the founder's rate motors (the default until 2026-11-12) are unchanged by the model's existence
-    rate = Spider(motors="rate")
-    assert Spider().motors == "target"                           # the default since
+    # the founder's rate muscles (the default until 2026-11-12) are unchanged by the model's existence
+    rate = Spider(muscles="rate")
+    assert Spider().muscles == "target"                           # the default since
     cmd = hold(); cmd[2] = 2
     rate.step(cmd)
     rate.step(hold())
     assert rate.joints[1, 0] == pytest.approx(1.5 * 0.05)    # hold holds the joint, not a setpoint
-    assert rate.motors == "rate"
+    assert rate.muscles == "rate"
     with pytest.raises(ValueError):
-        Spider(motors="servo")
+        Spider(muscles="servo")
 
 
-def test_the_motor_model_and_its_setpoints_survive_the_world_state():
-    spider = Spider(motors="target")
+def test_the_muscle_model_and_its_setpoints_survive_the_world_state():
+    spider = Spider(muscles="target")
     cmd = hold(); cmd[2] = 2; cmd[5] = 0
     spider.step(cmd)
     again = Spider.restore(spider.state_dict())
-    assert again.motors == "target" and np.array_equal(again.targets, spider.targets)
+    assert again.muscles == "target" and np.array_equal(again.targets, spider.targets)
     for _ in range(5):
         a = spider.step(hold()); b = again.step(hold())
         assert a == b and np.array_equal(spider.joints, again.joints)
     # a world saved before the model existed is a rate body
-    old = Spider().state_dict(); del old["motors"]; del old["targets"]
-    assert Spider.restore(old).motors == "rate"
+    old = Spider().state_dict(); del old["muscles"]; del old["targets"]
+    assert Spider.restore(old).muscles == "rate"
 
 
 def test_the_drift_takes_ground_every_moment_planted_or_not():
@@ -388,11 +388,11 @@ def test_the_drift_takes_ground_every_moment_planted_or_not():
         Spider(drift=-0.01)
 
 
-def test_the_motor_rate_scales_how_far_a_joint_runs_in_a_moment():
+def test_the_muscle_rate_scales_how_far_a_joint_runs_in_a_moment():
     import numpy as np
     from spider.body import DT, HIGH, RATES, Spider
 
-    slow, fast = Spider(motors="target"), Spider(motors="target", motor_rate=2.0)
+    slow, fast = Spider(muscles="target"), Spider(muscles="target", muscle_rate=2.0)
     start = slow.joints.copy()
     increase = [2] * 16                                    # every joint toward the high end of its range
     slow.step(increase)
@@ -402,12 +402,15 @@ def test_the_motor_rate_scales_how_far_a_joint_runs_in_a_moment():
     unclamped = (fast.joints < HIGH - 1e-9) & (ran_slow > 0)
     assert np.allclose(ran_fast[unclamped], 2.0 * ran_slow[unclamped], atol=1e-9)
     assert np.all(ran_slow <= np.broadcast_to(RATES * DT, ran_slow.shape) + 1e-9)
-    rate = Spider(motors="rate", motor_rate=0.5)
+    rate = Spider(muscles="rate", muscle_rate=0.5)
     rate.step(increase)
     assert np.allclose(np.abs(rate.joints - start)[unclamped], 0.5 * ran_slow[unclamped], atol=1e-9)
-    assert Spider.restore(fast.state_dict()).motor_rate == 2.0
+    assert Spider.restore(fast.state_dict()).muscle_rate == 2.0
     older = fast.state_dict()
-    del older["motor_rate"]                                # a world saved before the rate existed ran at 1
-    assert Spider.restore(older).motor_rate == 1.0
+    del older["muscle_rate"]                                # a world saved before the rate existed ran at 1
+    assert Spider.restore(older).muscle_rate == 1.0
+    renamed = Spider(muscles="target", muscle_rate=3.0).state_dict()   # saved before 2026-11-14
+    renamed["motors"], renamed["motor_rate"] = renamed.pop("muscles"), renamed.pop("muscle_rate")
+    assert Spider.restore(renamed).muscles == "target" and Spider.restore(renamed).muscle_rate == 3.0
     with pytest.raises(ValueError):
-        Spider(motor_rate=0.0)
+        Spider(muscle_rate=0.0)

@@ -9,10 +9,10 @@ The flags are the nursery's (``python server.py --help``). Each has an environme
 of the same meaning that sets its default: HOST (127.0.0.1), PORT (8080), POLICY (brain),
 SEED (0), PACE (20 moments/s), BACKEND (auto | cpu | torch | torch:<device>), RUNS (runs),
 AUTOSAVE_MINUTES (5), STANCE_PAY (0), YAW_PAY (0), PROGRESS_WINDOW (1), HIGH_WATER (0), OLD_GROUND (0), PAY_PER_METRE (40),
-BACKWARD_PAY (0), COURSE (off) and DRIFT (0, the world's current), the reward's settings, MOTORS (target) for a newborn's body, LAYOUT (joint)
+BACKWARD_PAY (0), COURSE (off) and DRIFT (0, the world's current), the reward's settings, MUSCLES (target) for a newborn's body, LAYOUT (joint)
 for how a newborn brain's answer is read (a slot per joint or per leg), SETPOINTS (0) to
 sense the servos' setpoints too, COMPASS (0) to sense the heading and GROUND (0) to sense the velocity over the ground. A saved life in RUNS is continued, with its own genes, seed,
-senses, motors, layout and law; shutdown saves it. The page's settings change the law on the living
+senses, muscles, layout and law; shutdown saves it. The page's settings change the law on the living
 brain (control ``law``) and name the next birth (control ``reset`` with a value).
 """
 
@@ -27,10 +27,10 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .body import DEFAULT_MOTORS, MOTORS
+from .body import DEFAULT_MUSCLES, MUSCLES
 from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .life import (BACKWARD_PAY, DRIFT, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life,
-                   MOTOR_RATE, STRICT, checked_course)
+                   MUSCLE_RATE, STRICT, checked_course)
 from .nursery import genes_from, parse_gene
 from .senses import PER, Senses
 
@@ -130,7 +130,7 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
                         help="name=value for a newborn brain, e.g. modules=48,24 (repeatable; a saved brain keeps its own)")
     parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
     parser.add_argument("--setpoints", action="store_true", default=_flag("SETPOINTS", False),
-                        help="sense the servos' setpoints too, for a newborn (needs --motors target)")
+                        help="sense the servos' setpoints too, for a newborn (needs --muscles target)")
     parser.add_argument("--compass", action="store_true", default=_flag("COMPASS", False),
                         help="sense the heading too (its cosine and sine), for a newborn: the sense the course law is read by")
     parser.add_argument("--ground", action="store_true", default=_flag("GROUND", False),
@@ -155,18 +155,18 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=float(env("BACKWARD_PAY", BACKWARD_PAY)),
                         help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
-    parser.add_argument("--motor-rate", type=float, default=float(env("MOTOR_RATE", MOTOR_RATE)),
+    parser.add_argument("--muscle-rate", type=float, default=float(env("MUSCLE_RATE", MUSCLE_RATE)),
                         help=f"a factor on both joint rates: how far a joint runs toward its command in one moment "
-                             f"(default {MOTOR_RATE}; the body's, set and saved with the law)")
+                             f"(default {MUSCLE_RATE}; the body's, set and saved with the law)")
     parser.add_argument("--drift", type=float, default=float(env("DRIFT", DRIFT)),
                         help=f"the world's current: metres a second the body loses backward along its heading every "
                              f"moment, planted or not (default {DRIFT}; 0 = still ground)")
     parser.add_argument("--layout", choices=LAYOUTS, default=env("LAYOUT", DEFAULT_LAYOUT),
                         help=f"how a newborn brain's answer is read: a slot per joint (three answers) or per leg "
                              f"(nine, the pairs of its two joints' answers); a saved brain keeps its own (default {DEFAULT_LAYOUT})")
-    parser.add_argument("--motors", choices=MOTORS, default=env("MOTORS", DEFAULT_MOTORS),
-                        help=f"the body's motor model for a newborn: rate (a command moves the joint for one moment) "
-                             f"or target, position servos (default {DEFAULT_MOTORS})")
+    parser.add_argument("--muscles", choices=MUSCLES, default=env("MUSCLES", DEFAULT_MUSCLES),
+                        help=f"the body's muscle model for a newborn: rate (a command moves the joint for one moment) "
+                             f"or target, position servos (default {DEFAULT_MUSCLES})")
     return parser.parse_args(argv)
 
 
@@ -186,13 +186,13 @@ def life_from(args: argparse.Namespace) -> Life:
         high_water=args.high_water,
         old_ground=args.old_ground,
         pay_per_metre=args.pay_per_metre,
-        motors=args.motors,
+        muscles=args.muscles,
         backward_pay=args.backward_pay,
         course=args.course,
         layout=args.layout,
         drift=args.drift,
         strict=args.strict,
-        motor_rate=args.motor_rate,
+        muscle_rate=args.muscle_rate,
     )
     life.autosave_minutes = float(args.autosave_minutes)
     if args.policy == "brain" and life.brain_file.exists():

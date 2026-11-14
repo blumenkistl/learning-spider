@@ -2,7 +2,7 @@
 a population code (tuned inputs, quiet away from their value), and one raw flag per foot that
 says whether it touches the ground. No constant drive input, no target, no answer.
 
-Under position servos (``Spider(motors="target")``) each joint also has a held setpoint, state
+Under position servos (``Spider(muscles="target")``) each joint also has a held setpoint, state
 of the body as the angle is; ``Senses(setpoints=True)`` reads the sixteen setpoints too, through
 the same code, so that the brain sees whether a joint is on its way or at rest. It is an option
 named in every reading made under it (README, "The setpoint senses").
@@ -48,7 +48,7 @@ GROUND_RANGES = [SPEED_RANGE, SPEED_RANGE]
 
 class Senses:
     """A fixed population code over the readings plus the planted flags; with ``setpoints``
-    the servos' setpoints are readings too (only a body with target motors has them), with
+    the servos' setpoints are readings too (only a body with target muscles has them), with
     ``compass`` the heading's cosine and sine, with ``ground`` the velocity over the ground in
     the world's frame."""
 
@@ -67,8 +67,8 @@ class Senses:
     def readings(self, spider: Spider) -> np.ndarray:
         own = [spider.joints[:, 0], spider.joints[:, 1], [spider.vx, spider.omega]]
         if self.setpoints:
-            if spider.motors != "target":
-                raise ValueError("the setpoint senses need a body with target motors")
+            if spider.muscles != "target":
+                raise ValueError("the setpoint senses need a body with target muscles")
             own += [spider.targets[:, 0], spider.targets[:, 1]]
         if self.compass:
             own += [[np.cos(spider.heading), np.sin(spider.heading)]]

@@ -106,7 +106,7 @@ shows the pace asked for and the moments a second the loop actually makes.
 Every reading, button and setting on the panel explains itself on mouse-over, with the measured dose where one exists. Under the buttons, a collapsed `settings` line opens two columns. **law, live** holds the
 reward's nine settings (the stance and yaw hints, the window, the high-water mark and its leak,
 the pay per metre, the backward charge, the course and the strict course) and, beside them, the world's drift (a
-current the body loses ground to; "The drift" below) and the body's motor rate (how far a joint
+current the body loses ground to; "The drift" below) and the body's muscle rate (how far a joint
 runs in a moment; "The reward" below), and `Apply law` changes them from the next moment on (a number typed past a field's range is set back to its end, 40 in backward pay to 1, before it is read);
 the outcome already earned is delivered as it was earned, and the same law is no change. A life
 whose law changed is not a life under one law: it is a schedule, and the page says so; the
@@ -116,8 +116,8 @@ change is noted ("law changed at moment N: …, this life is a schedule"), count
 line ("a schedule: changed 2×"), reported by `/api/describe` as `law_changes` and saved with
 the life, so a continued life keeps the law it was last paid under, whatever flags the server
 was started with (a note says which). **next birth, on Reset** holds what Reset gives birth
-to: the seed, the motor model, the motor layout (a slot per joint or per leg; measured in
-"A slot per leg"), whether the servos' setpoints are sensed (target motors only),
+to: the seed, the muscle model, the motor layout (a slot per joint or per leg; measured in
+"A slot per leg"), whether the servos' setpoints are sensed (target muscles only),
 the reward learner's three options from cadence's docs/reward.md as fields of their own (the
 actor's `hold`, its `entropy`, `maturity`; measured in "The reward learner's options"), the two
 observation codes of cadence's docs/senses.md as fields too (a fixed sparse `code`, a
@@ -141,14 +141,14 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--pay-per-metre` (40), `--backward-pay` (0), `--course` (off) and `--strict` (off), the two hints, the window, the high-water
 mark and its leak, the gain, the backward charge, the course and the strict course
 described under [the reward](#the-reward-spiderlifepy), `--drift` (0) for the world's current
-and `--motor-rate` (1) for the body's joint rates, both set and saved with the law, `--motors`
+and `--muscle-rate` (1) for the body's joint rates, both set and saved with the law, `--muscles`
 (`target` since 2026-11-12, `rate` before) for a newborn's body, `--layout` (`joint`; `leg` reads
 a newborn brain's answer a leg at a time, [the brain](#the-brain-spiderbrainpy)), `--setpoints` (off) to sense the servos' setpoints too
 and `--compass` (off) to sense the heading, `--ground` (off) to sense the velocity over the
 ground. An environment variable of the same name (`PORT`, `POLICY`, `SEED`, `PACE`, `BACKEND`, `RUNS`,
 `AUTOSAVE_MINUTES`, `STANCE_PAY`, `YAW_PAY`, `PROGRESS_WINDOW`, `HIGH_WATER`, `OLD_GROUND`, `PAY_PER_METRE`,
-`BACKWARD_PAY`, `COURSE`, `MOTORS`, `LAYOUT`, `SETPOINTS`, `COMPASS`, `GROUND`) sets a flag's
-default. A saved life is continued with its own genes, seed, senses, motors, layout and law, each
+`BACKWARD_PAY`, `COURSE`, `MUSCLES`, `LAYOUT`, `SETPOINTS`, `COMPASS`, `GROUND`) sets a flag's
+default. A saved life is continued with its own genes, seed, senses, muscles, layout and law, each
 noted when a flag asked for another (a life saved before the sidecar carried the law, the seed
 and the senses takes them from the flags, as before), and the high-water mark of a life saved
 without one starts where the body stands. A brain file without its sidecar has fixed senses:
@@ -236,8 +236,8 @@ one side's feet cannot hold a body up, with the pressing range keeping it reacha
 new life. No pitch or roll, no leg thickness beyond the stop, no friction model: the contact rule is a model
 chosen so that sliding and swinging do not pay and a gait does.
 
-The joints take the brain's three answers in one of two motor models, the body's for its life
-(`--motors`, `MOTORS` for the server; a saved life keeps its own and a flag that differs is
+The joints take the brain's three answers in one of two muscle models, the body's for its life
+(`--muscles`, `MUSCLES` for the server; a saved life keeps its own and a flag that differs is
 noted, not applied). Under `rate`, the founder until 2026-11-12, `decrease` and `increase` move the joint by its
 rate for the moment and `hold` leaves it where it is: a full swing needs the same answer
 sixteen moments running. Under `target` each joint is a position servo: `decrease` sets its
@@ -245,11 +245,11 @@ setpoint to the low end of the range, `increase` to the high end, `hold` keeps t
 and the joint travels toward it at the same rate, so one answer followed by holds drives the
 swing. The servo chooses nothing and knows no gait, but it is a different model from the
 founder's, named in every reading made under it; "The position commands" below has them.
-Since 2026-11-12 `target` is the default of a newborn body (`DEFAULT_MOTORS` in `spider/body.py`,
-the nursery's and the server's `--motors`, the page's next birth), because it is the model under
-which every life that walked farther than a metre was raised; `--motors rate` names the
+Since 2026-11-12 `target` is the default of a newborn body (`DEFAULT_MUSCLES` in `spider/body.py`,
+the nursery's and the server's `--muscles`, the page's next birth), because it is the model under
+which every life that walked farther than a metre was raised; `--muscles rate` names the
 founder's. The readings above that moment are under `rate` unless they say otherwise, and
-every reading since names its model. The page's `motors` row shows which model the body has.
+every reading since names its model. The page's `muscles` row shows which model the body has.
 
 ### The senses (`spider/senses.py`)
 
@@ -257,7 +257,7 @@ Eighteen continuous readings (sixteen joint angles, forward speed, yaw rate) thr
 `PopulationCode` with eight tuned inputs each, plus one raw flag per foot that says whether
 it touches the ground: 152 inputs in `[0, 1]`. No constant drive input, no target.
 
-Under the position commands (`--motors target`) the body carries sixteen setpoints the brain
+Under the position commands (`--muscles target`) the body carries sixteen setpoints the brain
 cannot see in the angles alone: a joint still on its way reads the same as a joint that was
 never sent. `--setpoints` adds them as sixteen more readings through the same code (280
 inputs): the brain senses what it last told each servo, which is its own state, not the
@@ -350,15 +350,21 @@ live is a law change, and the life a schedule) and named in every reading made u
 measured dose is 0.002 m/s, 3 m of ground over 30,000 moments, below the speed of the lives
 that walked above; its readings are under "The drift" below; the default stays 0.
 
-`--motor-rate F` (`MOTOR_RATE` for the server, default 1) is not a setting of the pay either
+`--muscle-rate F` (`MUSCLE_RATE` for the server, default 1) is not a setting of the pay either
 but of the body: a factor on both joint rates (hip 1.5 rad/s, knee 2.5 rad/s at 1), how far a
-joint runs toward its command in one moment (`motor_rate` in `spider/body.py`). It is not a
+joint runs toward its command in one moment (`muscle_rate` in `spider/body.py`). It is not a
 controller: the brain still chooses every moment, and the body still moves its joint; at 2 a
 full hip swing takes six moments instead of eleven, and the body's top speed doubles. A body
 at another rate is another body, so the rate is set, shown, saved and counted with the law
 like the drift (a change live is a law change, and the life a schedule; the page's law panel
-has the field, the law line shows `motors ×F`) and named in every reading made under it. It
+has the field, the law line shows `muscles ×F`) and named in every reading made under it. It
 is unmeasured; the default stays 1.
+
+The body has muscles, not motors: until 2026-11-14 the muscle model and the muscle rate were
+named the motor model and the motor rate (`--motors`, `MOTORS`, `--motor-rate`, `MOTOR_RATE`,
+`motor_rate`). The flags and the environment's names changed with them; a life saved under the
+old names loads with its own muscles, rate, law and changes. The brain's motor cortex keeps its
+name: it is the brain's, not the body's.
 
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
 is paying for a posture and a course, not for an outcome. Both ship switched off
@@ -439,7 +445,7 @@ A brain saved on CUDA loads on the CPU.
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --high-water --old-ground 0.2  # and old ground a fifth
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --pay-per-metre 10  # a quarter of the gain, the same cap
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --backward-pay 1   # charge backward as forward pays
-.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --motors rate      # the founder's rate motors (the default until 2026-11-12)
+.venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --muscles rate      # the founder's rate muscles (the default until 2026-11-12)
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --setpoints        # the servos' setpoints sensed too
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass  # pay the line of the birth heading, sensed by a compass
 .venv/bin/python -m spider.nursery --moments 30000 --policy brain --seed 0 --course birth --compass --ground  # and the velocity over the ground sensed too
@@ -1058,9 +1064,9 @@ back half, and the learning brain, which jitters less, is paid less than chance 
 gain. The frozen copies are the hip sweep; the copy of 5 a metre on seed 1 stands. The gain
 stays 40, the flag stays an option. 6.7 ms a moment, 7.4 with the history.
 
-**The position commands.** The chain a gait needs under the founder's rate motors is long:
+**The position commands.** The chain a gait needs under the founder's rate muscles is long:
 a swing is the same answer sixteen moments running, on several legs, paid only at its end.
-`--motors target` makes each joint a position servo (the body section above): one answer sets
+`--muscles target` makes each joint a position servo (the body section above): one answer sets
 the setpoint to an end of the range, `hold` keeps it, and the joint travels there on its own,
 so a swing is one decision. This is a different model, not a gene of the founder's, and it is
 measured as one: a newborn body under it against random and frozen newborn under it, seeds
@@ -1069,14 +1075,14 @@ stance term:
 
 | 30,000 moments, forward metres (last 5000; planted feet, first 5000 → last 5000; aroused; r/moment) | Seed 0 | Seed 1 | Seed 2 |
 | --- | --- | --- | --- |
-| founders, rate motors (table above) | +0.211 (−0.10; 3.7 → 3.2; 0.99; 0.018) | +0.286 (+0.05; 2.5 → 3.1; 1.00; 0.019) | +0.078 (−0.08; 3.5 → 4.4; 1.00; 0.020) |
-| target motors | +0.205 (+0.08; 4.7 → 2.9; 0.99; 0.017) | +0.360 (+0.03; 3.1 → 4.2; 1.00; 0.021) | +1.503 (−0.10; 3.7 → 3.9; 0.99; 0.023) |
+| founders, rate muscles (table above) | +0.211 (−0.10; 3.7 → 3.2; 0.99; 0.018) | +0.286 (+0.05; 2.5 → 3.1; 1.00; 0.019) | +0.078 (−0.08; 3.5 → 4.4; 1.00; 0.020) |
+| target muscles | +0.205 (+0.08; 4.7 → 2.9; 0.99; 0.017) | +0.360 (+0.03; 3.1 → 4.2; 1.00; 0.021) | +1.503 (−0.10; 3.7 → 3.9; 0.99; 0.023) |
 | target, history 0, 0.7, 0.95 | +0.182 (+0.02; 4.2 → 4.0; 0.99; 0.026) | +0.795 (−0.09; 2.6 → 3.7; 0.99; 0.023) | +0.356 (+0.01; 4.7 → 4.3; 1.00; 0.022) |
 | target, high-water | −0.462 (+0.50; 4.1 → 4.0; 1.00; 0.000) | +0.396 (+0.18; 2.2 → 2.0; 1.00; 0.000) | +1.549 (+0.16; 3.9 → 3.4; 0.99; 0.003) |
 | target, stance 0.1 | +0.618 (0.00; 4.1 → 6.6; 1.00; 0.017) | +0.525 (−0.04; 3.2 → 5.9; 1.00; 0.018) | +0.539 (+0.03; 4.7 → 5.4; 1.00; 0.021) |
-| random, target motors | −1.131 (+0.41; 2.9 → 3.1; 0.060) | +0.508 (−0.17; 3.1 → 3.2; 0.062) | −0.120 (−0.95; 3.1 → 3.3; 0.060) |
-| random, rate motors (table above) | +0.894 (+0.42; 2.8 → 2.8; 0.039) | +0.064 (+0.43; 3.2 → 3.4; 0.055) | +0.413 (−0.29; 3.0 → 3.1; 0.042) |
-| frozen newborn, target motors, 3000 moments | −0.106 (5.0) | 0.000 (2.0) | +0.035 (6.0) |
+| random, target muscles | −1.131 (+0.41; 2.9 → 3.1; 0.060) | +0.508 (−0.17; 3.1 → 3.2; 0.062) | −0.120 (−0.95; 3.1 → 3.3; 0.060) |
+| random, rate muscles (table above) | +0.894 (+0.42; 2.8 → 2.8; 0.039) | +0.064 (+0.43; 3.2 → 3.4; 0.055) | +0.413 (−0.29; 3.0 → 3.1; 0.042) |
+| frozen newborn, target muscles, 3000 moments | −0.106 (5.0) | 0.000 (2.0) | +0.035 (6.0) |
 | frozen copies, 3000 moments (plain / history / high-water / stance) | 0.155 / 0.156 / 0.048 / 0.152 | 0.149 / 0.158 / 0.083 / 0.151 | 0.153 / 0.153 / 0.124 / 0.155 |
 
 **Reading:** the servos lengthen the first phase and find no gait. Seed 2 under the plain
@@ -1088,7 +1094,7 @@ seeds, and nothing in any last block. Under the high-water mark the brain earns 
 (0.000–0.003 a moment) and the body wanders as random does, ±0.5 m per 3000 moments; the
 +0.50 m of seed 0's last block is one such swing, between a −0.68 and a −0.29 before it, not
 a walk, and the high-water copies are short of a sweep. Random under servos moves more than
-random under rate motors (1.1 m against 0.9 at most, 0.060 a moment against 0.043) because a
+random under rate muscles (1.1 m against 0.9 at most, 0.060 a moment against 0.043) because a
 random setpoint holds a joint's motion for several moments where a random rate reverses it,
 and the learning brain is again paid less than chance at every law. The model stays `rate`,
 `target` stays an option named in its readings. 4.9 ms a moment.
@@ -1098,7 +1104,7 @@ and the learning brain is again paid less than chance at every law. The model st
 nothing and only a stroke that the body keeps pays; this was the first law, left on the
 body before the support rule because the brain lifted every foot to avoid it. And
 `--gene gamma=0.99` lengthens the value horizon from twenty moments to a hundred, where a
-lift, swing, plant and stroke span some forty. Separated body, rate motors, 30,000 moments,
+lift, swing, plant and stroke span some forty. Separated body, rate muscles, 30,000 moments,
 seeds 0–2: the full charge, half of it, the horizon, both, and the charge with the stance
 term; random under the full charge for the income a jitter nets:
 
@@ -1165,7 +1171,7 @@ pair within ±0.2), no joint has a period. The frozen copy says the same as ever
 before it: the greedy policy is the one hip sweep, the stroke without its return. What held
 the gait back here is the return swing, the half of the chain that pays only through the
 stroke after it: the policy keeps the half that pays at once. A longer eligibility (`lam`
-0.9, measured above under rate motors) and a longer horizon (`gamma` 0.99) are the brain's
+0.9, measured above under rate muscles) and a longer horizon (`gamma` 0.99) are the brain's
 own handles on that credit; under servos neither is measured. 4.9 ms a moment.
 
 **Credit for the return swing, under servos.** The reading above says the policy keeps the
@@ -1204,7 +1210,7 @@ one leg (3, 4–5, 6, 3, 5, and 5 under the founders), none of them held. The lo
 alone lies at or below the founders on two seeds and brings the sway's income (0.031–0.036)
 sooner; with the horizon it is no better than the horizon alone and stalls seed 2 at 0.042.
 Every frozen copy is the one hip sweep, 0.13–0.16 m: the greedy policy remains the stroke.
-The founders stay (lam 0.6, gamma 0.95, rate motors); `gamma=0.99` under servos is the
+The founders stay (lam 0.6, gamma 0.95, rate muscles); `gamma=0.99` under servos is the
 reading to build on. 4.0 ms a moment.
 
 **The crawl under the laws that pay nothing to a sway.** The crawl above was undone because
@@ -1792,7 +1798,7 @@ At 0.005 the lives made 1.1 / 0.5 / 0.4 m of the 7.5 lost; seed 0 fell calm at 4
 three-footed sway that loses the full 1.25 a window at 0.068 a moment, the standing income
 again, and seeds 1 and 2 stayed aroused at 0.018–0.019. The controls: random made −0.22 /
 −0.03 / −0.46 m beyond the 0.3 m the current took; the frozen newborn loses the current and
-nothing else (seed 0's −0.406 is its −0.106 under target motors above less 0.300); the
+nothing else (seed 0's −0.406 is its −0.106 under target muscles above less 0.300); the
 frozen copies make the hip sweep beyond the current, 0.12–0.24 m in 3000 moments at 0.002
 and 0.02–0.15 at 0.005. The drift stays off in the founder. For the current to bite, backward
 must cost: under the backward pay or the high-water mark a carried body earns nothing until

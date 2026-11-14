@@ -22,11 +22,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .body import DEFAULT_MOTORS, MOTORS
+from .body import DEFAULT_MUSCLES, MUSCLES
 from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .brain import genes_from, parse_gene  # noqa: F401  (the server imports them from here too)
 from .life import (BACKWARD_PAY, DRIFT, BLOCK, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY,
-                   MOTOR_RATE, STRICT, Life, checked_course)
+                   MUSCLE_RATE, STRICT, Life, checked_course)
 from .senses import PER, Senses
 
 
@@ -45,9 +45,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 brain_path=None if continuing else args.brain,
                 name=args.brain.stem if continuing else name, stance_pay=args.stance_pay,
                 yaw_pay=args.yaw_pay, window=args.window, high_water=args.high_water, old_ground=args.old_ground,
-                pay_per_metre=args.pay_per_metre, motors=args.motors, backward_pay=args.backward_pay,
+                pay_per_metre=args.pay_per_metre, muscles=args.muscles, backward_pay=args.backward_pay,
                 course=args.course, layout=args.layout, drift=args.drift, strict=args.strict,
-                motor_rate=args.motor_rate)
+                muscle_rate=args.muscle_rate)
     life.autosave_minutes = 0.0
     if continuing:
         life.load()
@@ -113,7 +113,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "genes": genes or {},
         **life.law(),                       # a continued life's own law, whatever the flags said
         "law_changes": life.law_changes,
-        "motors": life.motors,
+        "muscles": life.muscles,
         "layout": life.layout,
         "per": life.senses.per,
         "setpoints": life.senses.setpoints,
@@ -138,7 +138,7 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help="name=value, e.g. modules=48,24 or arousal.need=0 (repeatable)")
     parser.add_argument("--per", type=int, default=None, help="tuned inputs per reading (default 8)")
     parser.add_argument("--setpoints", action="store_true",
-                        help="sense the servos' setpoints too (needs --motors target; sixteen readings more)")
+                        help="sense the servos' setpoints too (needs --muscles target; sixteen readings more)")
     parser.add_argument("--compass", action="store_true",
                         help="sense the heading too, its cosine and sine (two readings more): the sense the course law is read by")
     parser.add_argument("--ground", action="store_true",
@@ -163,18 +163,18 @@ def main(argv: list[str] | None = None) -> dict[str, Any]:
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=BACKWARD_PAY,
                         help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
-    parser.add_argument("--motor-rate", type=float, default=MOTOR_RATE,
+    parser.add_argument("--muscle-rate", type=float, default=MUSCLE_RATE,
                         help=f"a factor on both joint rates: how far a joint runs toward its command in one moment "
-                             f"(default {MOTOR_RATE}; the body's, set and saved with the law)")
+                             f"(default {MUSCLE_RATE}; the body's, set and saved with the law)")
     parser.add_argument("--drift", type=float, default=DRIFT,
                         help=f"the world's current: metres a second the body loses backward along its heading every "
                              f"moment, planted or not (default {DRIFT}; 0 = still ground)")
     parser.add_argument("--layout", choices=LAYOUTS, default=DEFAULT_LAYOUT,
                         help=f"how a newborn brain's answer is read: a slot per joint (three answers) or per leg "
                              f"(nine, the pairs of its two joints' answers); a saved brain keeps its own (default {DEFAULT_LAYOUT})")
-    parser.add_argument("--motors", choices=MOTORS, default=DEFAULT_MOTORS,
-                        help=f"the body's motor model: rate (the founder until 2026-11-12, a command moves the joint for one "
-                             f"moment) or target, position servos (default {DEFAULT_MOTORS})")
+    parser.add_argument("--muscles", choices=MUSCLES, default=DEFAULT_MUSCLES,
+                        help=f"the body's muscle model: rate (the founder until 2026-11-12, a command moves the joint for one "
+                             f"moment) or target, position servos (default {DEFAULT_MUSCLES})")
     parser.add_argument("--backend", default=None, help="auto (default), cpu, torch or torch:<device>")
     parser.add_argument("--json", type=Path, default=None, help="write the summary here")
     parser.add_argument("--quiet", action="store_true")

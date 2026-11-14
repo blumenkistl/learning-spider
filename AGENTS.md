@@ -18,10 +18,10 @@ without a page, for measurement.
   lives through `brain.live`. It is never recreated per moment, per episode or per page load.
   A saved life is continued, with its world and its pending outcome, not replayed. The page's
   Reset is the one deliberate end of a life: after confirmation it deletes the save and a
-  newborn brain takes the body, of the seed, genes, motor model and senses the page's "next
+  newborn brain takes the body, of the seed, genes, muscle model and senses the page's "next
   birth" names (the life's own when it names nothing); nothing else recreates a brain, and
   genes are set at birth only.
-- **No controller between brain and motors.** Each motor slot is one joint's
+- **No controller between brain and muscles.** Each motor slot is one joint's
   `decrease / hold / increase`, or, under the leg layout (`--layout leg`, `LAYOUT`; a birth
   option composed into the brain, `joint` the founder), one leg's pair of them, nine answers
   that reach the same sixteen commands: a leg is then one choice to credit, not two. The
@@ -30,8 +30,8 @@ without a page, for measurement.
   smoothing between the brain's answer and the joints. Adding one makes a different model;
   label it as a control. The body's own stops (the hip and knee ranges, the stop that keeps a
   side's neighbouring legs from crossing) are the world's, not a controller: they bound what
-  the brain's answer can do, they never choose it. The body has two motor models
-  (`--motors`, `MOTORS`): `rate`, the founder until 2026-11-12, where a command moves the joint for one moment;
+  the brain's answer can do, they never choose it. The body has two muscle models
+  (`--muscles`, `MUSCLES`): `rate`, the founder until 2026-11-12, where a command moves the joint for one moment;
   and `target`, where each joint is a position servo whose setpoint a command sets to an end
   of the joint's range and `hold` keeps. The servo chooses nothing and knows no gait, but it
   is a different model, named in every reading made under it (the README's "The position
@@ -69,7 +69,7 @@ without a page, for measurement.
   different world from a life on still ground, so the drift is set, shown, saved and counted
   with the law (a change live is a law change; the page's `drift` button is one) and named in
   every reading made under it.
-  The motor rate (`--motor-rate`, `MOTOR_RATE`; 1 by default) is the body's, not a controller:
+  The muscle rate (`--muscle-rate`, `MUSCLE_RATE`; 1 by default) is the body's, not a controller:
   a factor on both joint rates, how far a joint runs toward its command in one moment; the
   brain still chooses every moment. A body at another rate is another body, so the rate is
   set, shown, saved and counted with the law like the drift and named in every reading made

@@ -264,13 +264,13 @@ fetch('/api/describe').then(r => r.json()).then(d => {
   if (b) openBrainView();
   else $('brainpanel-note').textContent = '· no brain in this life';
 }).catch(() => {});
-// What the description settles on the page: the law line, the motor line and the settings' fields.
+// What the description settles on the page: the law line, the muscle line and the settings' fields.
 // Called again after a control that changes the description (a law change, a load).
 let lawFilled = null;                                  // the law the fields were last filled from
 function describedBy(d) {
   described = d;
   if (lastState) $('law').textContent = law(lastState);
-  $('motors').textContent = (d.motors || 'rate') + (d.layout === 'leg' ? ', a slot per leg' : '') + (d.setpoints ? ', setpoints sensed' : '') + (d.compass ? ', a compass' : '') + (d.ground ? ', the ground sense' : '');
+  $('muscles').textContent = (d.muscles || 'rate') + (d.layout === 'leg' ? ', a slot per leg' : '') + (d.setpoints ? ', setpoints sensed' : '') + (d.compass ? ', a compass' : '') + (d.ground ? ', the ground sense' : '');
   const r = d.reward || {};
   // The fields are filled from the server's law only when that law is new to the page: a
   // description re-read for another reason (the socket reconnecting) leaves a half-made edit alone.
@@ -285,7 +285,7 @@ function describedBy(d) {
   $('drift').textContent = r.drift ? `drift ${r.drift} m/s` : 'drift off';
   $('drift').classList.toggle('on', !!r.drift);
   $('birth-seed').value = d.seed;
-  $('birth-motors').value = d.motors || 'target';
+  $('birth-muscles').value = d.muscles || 'target';
   $('birth-layout').value = d.layout || 'joint';
   $('birth-setpoints').checked = !!d.setpoints;
   $('birth-compass').checked = !!d.compass;
@@ -300,7 +300,7 @@ function describedBy(d) {
   $('birth-genes').value = geneWords(genes);
   $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
 }
-const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift', 'strict', 'motor_rate'];
+const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift', 'strict', 'muscle_rate'];
 const DRIFT_DOSE = 0.002;   // m/s: what the drift button switches on when the settings field names no dose
 // The nursery's words for a brain's gene overrides: {gamma: 0.99, arousal: {need: 0}} → "gamma=0.99 arousal.need=0".
 function geneWords(genes, prefix = '') {
@@ -326,7 +326,7 @@ function law(m) {
   if (r.stance_pay) parts.push(`stance ${r.stance_pay}`);
   if (r.yaw_pay) parts.push(`yaw ${r.yaw_pay}`);
   if (r.drift) parts.push(`drift ${r.drift} m/s`);
-  if (r.motor_rate !== undefined && r.motor_rate !== 1) parts.push(`motors ×${r.motor_rate}`);
+  if (r.muscle_rate !== undefined && r.muscle_rate !== 1) parts.push(`muscles ×${r.muscle_rate}`);
   const changes = described.law_changes ? described.law_changes.length : 0;
   if (changes) parts.push(`a schedule: changed ${changes}×`);
   return parts.join(' · ');
@@ -394,7 +394,23 @@ function paintBrain(m) {
   brainView.setActivity(a.all, flash);
 }
 
+// The wait until the spider moves: the page opens with it shown (the server may still be
+// composing or loading the brain), a Reset and a lost connection show it again, and it goes
+// once the moments count on, or at once on a paused life, which will not move until resumed.
+let initFrom = null;
+function initializing(on) {
+  $('init').classList.toggle('show', on);
+  if (on) initFrom = null;
+}
+function settled(m) {
+  if (!$('init').classList.contains('show')) return;
+  if (m.paused) { initializing(false); return; }
+  if (initFrom === null) initFrom = m.moments;
+  else if (m.moments > initFrom) initializing(false);
+}
+
 function update(m) {
+  settled(m);
   draw(m.pose);
   $('policy').textContent = m.policy;
   $('moments').textContent = m.moments;
@@ -489,7 +505,7 @@ function strip(m) {
   }
   ctx.fillStyle = '#8b94a7';
   ctx.font = '9px system-ui';
-  ctx.fillText('sensory', 6, 11); ctx.fillText('association', 6, 45); ctx.fillText(described && described.motors === 'target' ? 'motor: to low end · hold setpoint · to high end, per joint' : 'motor ↓ hold ↑ per joint', 6, 91);
+  ctx.fillText('sensory', 6, 11); ctx.fillText('association', 6, 45); ctx.fillText(described && described.muscles === 'target' ? 'motor: to low end · hold setpoint · to high end, per joint' : 'motor ↓ hold ↑ per joint', 6, 91);
 }
 function row(values, y, h, w, pad) {
   const cell = w / values.length;
@@ -514,12 +530,12 @@ function birth() {
   if ($('birth-maturity').checked) words.push('maturity=true');
   if (num($('birth-code')) > 0) words.push('code=' + Math.round(Number($('birth-code').value)));
   if (num($('birth-learned-code')) > 0) words.push('learned_code=' + Math.round(Number($('birth-learned-code').value)));
-  return { seed: num($('birth-seed')), motors: $('birth-motors').value, layout: $('birth-layout').value,
+  return { seed: num($('birth-seed')), muscles: $('birth-muscles').value, layout: $('birth-layout').value,
            setpoints: $('birth-setpoints').checked, compass: $('birth-compass').checked, ground: $('birth-ground').checked,
            genes: words.filter(Boolean).join(' ') };
 }
 function resetQuestion(b) {
-  return 'Reset everything?\n\nA newborn brain replaces the live one: seed ' + b.seed + ', ' + b.motors + ' motors' + (b.layout === 'leg' ? ', a slot per leg' : '')
+  return 'Reset everything?\n\nA newborn brain replaces the live one: seed ' + b.seed + ', ' + b.muscles + ' muscles' + (b.layout === 'leg' ? ', a slot per leg' : '')
     + (b.setpoints ? ', setpoints sensed' : '') + (b.compass ? ', a compass' : '') + (b.ground ? ', the ground sense' : '') + ', ' + (b.genes ? 'genes ' + b.genes : 'founder genes') + '.\n'
     + 'The world returns to the origin, every counter goes to zero and the saved life in runs/ is deleted.\n\n'
     + 'The brain that has lived until now is gone for good.';
@@ -547,8 +563,10 @@ document.querySelectorAll('button[data-op]').forEach(b => b.addEventListener('cl
   if (b.dataset.op === 'reset') {
     body.value = birth();
     if (!window.confirm(resetQuestion(body.value))) return;
+    initializing(true);
   } else if (b.dataset.value !== undefined) body.value = isNaN(b.dataset.value) ? b.dataset.value : Number(b.dataset.value);
   const result = await control(body);
+  if (!result && b.dataset.op === 'reset') initializing(false);   // refused: the old life goes on
   if (result && b.dataset.op === 'reset') location.reload();
   else if (result && b.dataset.op === 'load') refreshDescription();
   else if (result && b.dataset.op === 'save') toast(b, result.saved ? 'saved' : (result.why || 'not saved'));
@@ -576,7 +594,7 @@ function connect() {
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.onopen = () => { $('link').textContent = 'live'; if (described) refreshDescription(); };   // a restarted server may hold another life
   ws.onmessage = e => update(JSON.parse(e.data));
-  ws.onclose = () => { $('link').textContent = 'reconnecting…'; setTimeout(connect, 1000); };
+  ws.onclose = () => { $('link').textContent = 'reconnecting…'; initializing(true); setTimeout(connect, 1000); };
   ws.onerror = () => ws.close();
 }
 connect();

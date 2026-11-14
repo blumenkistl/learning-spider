@@ -3,8 +3,8 @@ model that turns the motion of planted feet into motion of the body.
 
 Frame: z up, x forward, y left. Angles in radians, lengths in metres, one moment is ``DT``
 seconds. The sixteen joints are commanded only as ``decrease / hold / increase``; there is no
-controller between those commands and the joints. The body has two motor models, chosen at its
-birth and kept for its life (``motors``): under ``rate``, the founder until 2026-11-12, a command moves the
+controller between those commands and the joints. The body has two muscle models, chosen at its
+birth and kept for its life (``muscles``): under ``rate``, the founder until 2026-11-12, a command moves the
 joint by its rate for one moment and ``hold`` keeps it where it is; under ``target`` each joint
 is a position servo with a setpoint, a command sets the setpoint to that end of the joint's
 range, ``hold`` keeps the setpoint, and the joint moves toward it at the same rate. The servo
@@ -29,11 +29,11 @@ its feet did. It is the world's, a problem and not a hint: the reward is still t
 motion, which now includes the ground lost, so standing still and swaying go backward and only
 a walk faster than the current nets ground. The nursery's and the server's ``--drift`` set it,
 the page switches it live, and every reading made under it names it (README, "The drift").
-The motors run at a rate (``motor_rate``, a factor on both joint rates, 1 by default): how far
+The muscles run at a rate (``muscle_rate``, a factor on both joint rates, 1 by default): how far
 a joint runs toward its command in one moment. It is the body's, not a controller: the brain
 still chooses every moment, and the body still moves its joint; a body at another rate is
 another body, so the rate is set, shown, saved and counted with the law like the drift
-(``--motor-rate``, the page's law panel) and named in every reading made under it.
+(``--muscle-rate``, the page's law panel) and named in every reading made under it.
 """
 
 from __future__ import annotations
@@ -117,8 +117,8 @@ def supported(planted) -> bool:
 HIPS = np.array([(HIP_X[i % PER_SIDE], SIDE[i] * HIP_Y, 0.0) for i in range(LEGS)])
 SPLAY = np.array([HIP_SPLAY[i % PER_SIDE] for i in range(LEGS)])
 RATES = np.array([HIP_RATE, KNEE_RATE])
-MOTORS = ("rate", "target")             # the two motor models; rate was the founder
-DEFAULT_MOTORS = "target"               # the model a newborn body gets when nothing names one (rate until
+MUSCLES = ("rate", "target")             # the two muscle models; rate was the founder
+DEFAULT_MUSCLES = "target"               # the model a newborn body gets when nothing names one (rate until
                                         # 2026-11-12; the README's "The position commands" measured the change)
 LOW = np.array([HIP_RANGE[0], KNEE_RANGE[0]])
 HIGH = np.array([HIP_RANGE[1], KNEE_RANGE[1]])
@@ -162,18 +162,18 @@ class Spider:
     planted_before: np.ndarray | None = None
     moments: int = 0
     recentres: int = 0
-    motors: str = DEFAULT_MOTORS        # the motor model, see the module docstring
+    muscles: str = DEFAULT_MUSCLES        # the muscle model, see the module docstring
     drift: float = 0.0                  # the world's current, m/s backward along the heading, see the docstring
-    motor_rate: float = 1.0             # a factor on both joint rates: how far a joint runs in one moment
-    targets: np.ndarray | None = None   # the servos' setpoints under target motors; unused under rate
+    muscle_rate: float = 1.0             # a factor on both joint rates: how far a joint runs in one moment
+    targets: np.ndarray | None = None   # the servos' setpoints under target muscles; unused under rate
 
     def __post_init__(self) -> None:
-        if self.motors not in MOTORS:
-            raise ValueError(f"motors must be one of {MOTORS}, not {self.motors!r}")
+        if self.muscles not in MUSCLES:
+            raise ValueError(f"muscles must be one of {MUSCLES}, not {self.muscles!r}")
         if not math.isfinite(self.drift) or self.drift < 0:
             raise ValueError(f"the drift is a speed backward, 0 or more, not {self.drift}")
-        if not math.isfinite(self.motor_rate) or self.motor_rate <= 0:
-            raise ValueError(f"the motor rate is a positive factor on the joint rates, not {self.motor_rate}")
+        if not math.isfinite(self.muscle_rate) or self.muscle_rate <= 0:
+            raise ValueError(f"the muscle rate is a positive factor on the joint rates, not {self.muscle_rate}")
         if self.targets is None:
             self.targets = self.joints.copy()
         if self.feet_before is None or self.planted_before is None:
@@ -212,15 +212,15 @@ class Spider:
         cmd = np.asarray(commands, dtype=float).reshape(LEGS, 2) - 1.0
         if not np.all(np.isin(cmd, (-1.0, 0.0, 1.0))):
             raise ValueError("commands must be 0, 1 or 2 per joint")
-        if self.motors == "target":
+        if self.muscles == "target":
             # a command sets the servo's setpoint to that end of the range, hold keeps it;
             # the joint moves toward the setpoint by at most its rate
             self.targets = np.where(cmd < 0, LOW, np.where(cmd > 0, HIGH, self.targets))
-            reach = RATES * self.motor_rate * DT                # how far a joint runs in this moment
+            reach = RATES * self.muscle_rate * DT                # how far a joint runs in this moment
             move = np.clip(self.targets - self.joints, -reach, reach)
             self.joints = separate(np.clip(self.joints + move, LOW, HIGH))
         else:
-            self.joints = separate(np.clip(self.joints + cmd * RATES * self.motor_rate * DT, LOW, HIGH))
+            self.joints = separate(np.clip(self.joints + cmd * RATES * self.muscle_rate * DT, LOW, HIGH))
 
         _, foot = kinematics(self.joints)
         planted = HEIGHT + foot[:, 2] <= CONTACT_Z
@@ -291,8 +291,8 @@ class Spider:
             "feet_before": self.feet_before.tolist(),
             "planted_before": [bool(p) for p in self.planted_before],
             "moments": self.moments, "recentres": self.recentres,
-            "motors": self.motors, "targets": self.targets.tolist(),
-            "drift": self.drift, "motor_rate": self.motor_rate,
+            "muscles": self.muscles, "targets": self.targets.tolist(),
+            "drift": self.drift, "muscle_rate": self.muscle_rate,
         }
 
     @classmethod
@@ -304,10 +304,12 @@ class Spider:
             feet_before=np.array(state["feet_before"], dtype=float).reshape(LEGS, 3),
             planted_before=np.array(state["planted_before"], dtype=bool),
             moments=int(state["moments"]), recentres=int(state.get("recentres", 0)),
-            motors=str(state.get("motors", "rate")),   # a world saved before the model existed is a rate body
+            # a world saved before the model existed is a rate body; one saved before 2026-11-14 names it "motors"
+            muscles=str(state.get("muscles", state.get("motors", "rate"))),
             targets=None if state.get("targets") is None else np.array(state["targets"], dtype=float).reshape(LEGS, 2),
             drift=float(state.get("drift", 0.0)),   # a world saved before the current existed had none
-            motor_rate=float(state.get("motor_rate", 1.0)),   # and one saved before the rate existed ran at 1
+            # one saved before the rate existed ran at 1; before 2026-11-14 it was the "motor_rate"
+            muscle_rate=float(state.get("muscle_rate", state.get("motor_rate", 1.0))),
         )
 
     def pose(self) -> dict:
