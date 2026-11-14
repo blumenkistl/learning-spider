@@ -30,7 +30,7 @@ from aiohttp import web
 from .body import DEFAULT_MOTORS, MOTORS
 from .brain import DEFAULT_LAYOUT, LAYOUTS
 from .life import (BACKWARD_PAY, DRIFT, COURSE, HIGH_WATER, OLD_GROUND, PROGRESS_PAY, PROGRESS_WINDOW, STANCE_PAY, YAW_PAY, Life,
-                   STRICT, checked_course)
+                   MOTOR_RATE, STRICT, checked_course)
 from .nursery import genes_from, parse_gene
 from .senses import PER, Senses
 
@@ -155,6 +155,9 @@ def arguments(argv: list[str] | None = None) -> argparse.Namespace:
                         help=f"reward per metre of progress, under the cap of 0.5 a moment (default {PROGRESS_PAY})")
     parser.add_argument("--backward-pay", type=float, default=float(env("BACKWARD_PAY", BACKWARD_PAY)),
                         help=f"share of the pay per metre charged for backward progress, 0 to 1 (default {BACKWARD_PAY}; 0 = free)")
+    parser.add_argument("--motor-rate", type=float, default=float(env("MOTOR_RATE", MOTOR_RATE)),
+                        help=f"a factor on both joint rates: how far a joint runs toward its command in one moment "
+                             f"(default {MOTOR_RATE}; the body's, set and saved with the law)")
     parser.add_argument("--drift", type=float, default=float(env("DRIFT", DRIFT)),
                         help=f"the world's current: metres a second the body loses backward along its heading every "
                              f"moment, planted or not (default {DRIFT}; 0 = still ground)")
@@ -189,6 +192,7 @@ def life_from(args: argparse.Namespace) -> Life:
         layout=args.layout,
         drift=args.drift,
         strict=args.strict,
+        motor_rate=args.motor_rate,
     )
     life.autosave_minutes = float(args.autosave_minutes)
     if args.policy == "brain" and life.brain_file.exists():

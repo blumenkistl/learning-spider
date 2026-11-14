@@ -29,6 +29,11 @@ its feet did. It is the world's, a problem and not a hint: the reward is still t
 motion, which now includes the ground lost, so standing still and swaying go backward and only
 a walk faster than the current nets ground. The nursery's and the server's ``--drift`` set it,
 the page switches it live, and every reading made under it names it (README, "The drift").
+The motors run at a rate (``motor_rate``, a factor on both joint rates, 1 by default): how far
+a joint runs toward its command in one moment. It is the body's, not a controller: the brain
+still chooses every moment, and the body still moves its joint; a body at another rate is
+another body, so the rate is set, shown, saved and counted with the law like the drift
+(``--motor-rate``, the page's law panel) and named in every reading made under it.
 """
 
 from __future__ import annotations
@@ -159,6 +164,7 @@ class Spider:
     recentres: int = 0
     motors: str = DEFAULT_MOTORS        # the motor model, see the module docstring
     drift: float = 0.0                  # the world's current, m/s backward along the heading, see the docstring
+    motor_rate: float = 1.0             # a factor on both joint rates: how far a joint runs in one moment
     targets: np.ndarray | None = None   # the servos' setpoints under target motors; unused under rate
 
     def __post_init__(self) -> None:
@@ -166,6 +172,8 @@ class Spider:
             raise ValueError(f"motors must be one of {MOTORS}, not {self.motors!r}")
         if not math.isfinite(self.drift) or self.drift < 0:
             raise ValueError(f"the drift is a speed backward, 0 or more, not {self.drift}")
+        if not math.isfinite(self.motor_rate) or self.motor_rate <= 0:
+            raise ValueError(f"the motor rate is a positive factor on the joint rates, not {self.motor_rate}")
         if self.targets is None:
             self.targets = self.joints.copy()
         if self.feet_before is None or self.planted_before is None:
@@ -208,10 +216,11 @@ class Spider:
             # a command sets the servo's setpoint to that end of the range, hold keeps it;
             # the joint moves toward the setpoint by at most its rate
             self.targets = np.where(cmd < 0, LOW, np.where(cmd > 0, HIGH, self.targets))
-            move = np.clip(self.targets - self.joints, -RATES * DT, RATES * DT)
+            reach = RATES * self.motor_rate * DT                # how far a joint runs in this moment
+            move = np.clip(self.targets - self.joints, -reach, reach)
             self.joints = separate(np.clip(self.joints + move, LOW, HIGH))
         else:
-            self.joints = separate(np.clip(self.joints + cmd * RATES * DT, LOW, HIGH))
+            self.joints = separate(np.clip(self.joints + cmd * RATES * self.motor_rate * DT, LOW, HIGH))
 
         _, foot = kinematics(self.joints)
         planted = HEIGHT + foot[:, 2] <= CONTACT_Z
@@ -283,7 +292,7 @@ class Spider:
             "planted_before": [bool(p) for p in self.planted_before],
             "moments": self.moments, "recentres": self.recentres,
             "motors": self.motors, "targets": self.targets.tolist(),
-            "drift": self.drift,
+            "drift": self.drift, "motor_rate": self.motor_rate,
         }
 
     @classmethod
@@ -298,6 +307,7 @@ class Spider:
             motors=str(state.get("motors", "rate")),   # a world saved before the model existed is a rate body
             targets=None if state.get("targets") is None else np.array(state["targets"], dtype=float).reshape(LEGS, 2),
             drift=float(state.get("drift", 0.0)),   # a world saved before the current existed had none
+            motor_rate=float(state.get("motor_rate", 1.0)),   # and one saved before the rate existed ran at 1
         )
 
     def pose(self) -> dict:

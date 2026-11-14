@@ -300,7 +300,7 @@ function describedBy(d) {
   $('birth-genes').value = geneWords(genes);
   $('genesline').textContent = 'live brain: ' + (geneWords(d.genes) || 'founder genes') + ' · seed ' + d.seed;
 }
-const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift', 'strict'];
+const LAW_KEYS = ['stance_pay', 'yaw_pay', 'window', 'high_water', 'old_ground', 'pay_per_metre', 'backward_pay', 'course', 'drift', 'strict', 'motor_rate'];
 const DRIFT_DOSE = 0.002;   // m/s: what the drift button switches on when the settings field names no dose
 // The nursery's words for a brain's gene overrides: {gamma: 0.99, arousal: {need: 0}} → "gamma=0.99 arousal.need=0".
 function geneWords(genes, prefix = '') {
@@ -326,6 +326,7 @@ function law(m) {
   if (r.stance_pay) parts.push(`stance ${r.stance_pay}`);
   if (r.yaw_pay) parts.push(`yaw ${r.yaw_pay}`);
   if (r.drift) parts.push(`drift ${r.drift} m/s`);
+  if (r.motor_rate !== undefined && r.motor_rate !== 1) parts.push(`motors ×${r.motor_rate}`);
   const changes = described.law_changes ? described.law_changes.length : 0;
   if (changes) parts.push(`a schedule: changed ${changes}×`);
   return parts.join(' · ');

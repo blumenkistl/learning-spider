@@ -69,6 +69,11 @@ without a page, for measurement.
   different world from a life on still ground, so the drift is set, shown, saved and counted
   with the law (a change live is a law change; the page's `drift` button is one) and named in
   every reading made under it.
+  The motor rate (`--motor-rate`, `MOTOR_RATE`; 1 by default) is the body's, not a controller:
+  a factor on both joint rates, how far a joint runs toward its command in one moment; the
+  brain still chooses every moment. A body at another rate is another body, so the rate is
+  set, shown, saved and counted with the law like the drift and named in every reading made
+  under it.
 - **Every outcome is delivered exactly once.** `Life.reward` is the last executed command's
   outcome not yet delivered. A refusal keeps it in the policy's `owed`; a policy switch moves it
   to the brain's `owed`; a save writes it to the sidecar; a load delivers it. Keep the tests in

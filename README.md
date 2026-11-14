@@ -106,7 +106,8 @@ shows the pace asked for and the moments a second the loop actually makes.
 Every reading, button and setting on the panel explains itself on mouse-over, with the measured dose where one exists. Under the buttons, a collapsed `settings` line opens two columns. **law, live** holds the
 reward's nine settings (the stance and yaw hints, the window, the high-water mark and its leak,
 the pay per metre, the backward charge, the course and the strict course) and, beside them, the world's drift (a
-current the body loses ground to; "The drift" below), and `Apply law` changes them from the next moment on (a number typed past a field's range is set back to its end, 40 in backward pay to 1, before it is read);
+current the body loses ground to; "The drift" below) and the body's motor rate (how far a joint
+runs in a moment; "The reward" below), and `Apply law` changes them from the next moment on (a number typed past a field's range is set back to its end, 40 in backward pay to 1, before it is read);
 the outcome already earned is delivered as it was earned, and the same law is no change. A life
 whose law changed is not a life under one law: it is a schedule, and the page says so; the
 `drift` button under the pace switches the current on at the dose the field names (0.002 m/s
@@ -139,8 +140,8 @@ The server takes the nursery's flags (`.venv/bin/python server.py --help`): `--p
 `--stance-pay` (0), `--yaw-pay` (0), `--window` (1), `--high-water` (off), `--old-ground` (0),
 `--pay-per-metre` (40), `--backward-pay` (0), `--course` (off) and `--strict` (off), the two hints, the window, the high-water
 mark and its leak, the gain, the backward charge, the course and the strict course
-described under [the reward](#the-reward-spiderlifepy), `--drift` (0) for the world's current,
-set and saved with the law, `--motors`
+described under [the reward](#the-reward-spiderlifepy), `--drift` (0) for the world's current
+and `--motor-rate` (1) for the body's joint rates, both set and saved with the law, `--motors`
 (`target` since 2026-11-12, `rate` before) for a newborn's body, `--layout` (`joint`; `leg` reads
 a newborn brain's answer a leg at a time, [the brain](#the-brain-spiderbrainpy)), `--setpoints` (off) to sense the servos' setpoints too
 and `--compass` (off) to sense the heading, `--ground` (off) to sense the velocity over the
@@ -348,6 +349,16 @@ life on still ground, so the drift is set, shown, saved and counted with the law
 live is a law change, and the life a schedule) and named in every reading made under it. The
 measured dose is 0.002 m/s, 3 m of ground over 30,000 moments, below the speed of the lives
 that walked above; its readings are under "The drift" below; the default stays 0.
+
+`--motor-rate F` (`MOTOR_RATE` for the server, default 1) is not a setting of the pay either
+but of the body: a factor on both joint rates (hip 1.5 rad/s, knee 2.5 rad/s at 1), how far a
+joint runs toward its command in one moment (`motor_rate` in `spider/body.py`). It is not a
+controller: the brain still chooses every moment, and the body still moves its joint; at 2 a
+full hip swing takes six moments instead of eleven, and the body's top speed doubles. A body
+at another rate is another body, so the rate is set, shown, saved and counted with the law
+like the drift (a change live is a law change, and the life a schedule; the page's law panel
+has the field, the law line shows `motors ×F`) and named in every reading made under it. It
+is unmeasured; the default stays 1.
 
 The progress term is the outcome. The other two are hints, which is reward shaping: the world
 is paying for a posture and a course, not for an outcome. Both ship switched off

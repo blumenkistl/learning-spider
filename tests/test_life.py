@@ -760,3 +760,21 @@ def test_the_strict_course_takes_the_lesser_over_the_window_not_each_moment(tmp_
     again = Life("random", seed=0, pace=0, runs=tmp_path, course=0.0, strict=True, backward_pay=1.0, window=2)
     assert len(again._nose) == 0
 
+
+
+def test_the_motor_rate_is_the_bodys_and_is_set_saved_and_counted_with_the_law(tmp_path):
+    life = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu", motor_rate=1.5)
+    assert life.body.motor_rate == 1.5 and life.describe()["reward"]["motor_rate"] == 1.5
+    assert "motors ×1.5" in law_text(life.law())
+    for _ in range(5):
+        life.tick()
+    change = life.set_law({"motor_rate": 2.0})
+    assert change["changed"] and life.body.motor_rate == 2.0 and len(life.law_changes) == 1
+    life.save()
+    again = Life("brain", seed=0, pace=0, runs=tmp_path, backend="cpu")   # asked for the founder rate
+    again.load()
+    assert again.motor_rate == 2.0 and again.body.motor_rate == 2.0       # the saved life keeps its own
+    assert any("motors ×2" in n for n in again.notes)
+    with pytest.raises(ValueError):
+        life.set_law({"motor_rate": 0})
+    assert "motors" not in law_text(Life("random", seed=0, pace=0, runs=tmp_path).law())

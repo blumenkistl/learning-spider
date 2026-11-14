@@ -386,3 +386,28 @@ def test_the_drift_takes_ground_every_moment_planted_or_not():
     assert Spider.restore(old).drift == 0.0
     with pytest.raises(ValueError):
         Spider(drift=-0.01)
+
+
+def test_the_motor_rate_scales_how_far_a_joint_runs_in_a_moment():
+    import numpy as np
+    from spider.body import DT, HIGH, RATES, Spider
+
+    slow, fast = Spider(motors="target"), Spider(motors="target", motor_rate=2.0)
+    start = slow.joints.copy()
+    increase = [2] * 16                                    # every joint toward the high end of its range
+    slow.step(increase)
+    fast.step(increase)
+    ran_slow = np.abs(slow.joints - start)
+    ran_fast = np.abs(fast.joints - start)
+    unclamped = (fast.joints < HIGH - 1e-9) & (ran_slow > 0)
+    assert np.allclose(ran_fast[unclamped], 2.0 * ran_slow[unclamped], atol=1e-9)
+    assert np.all(ran_slow <= np.broadcast_to(RATES * DT, ran_slow.shape) + 1e-9)
+    rate = Spider(motors="rate", motor_rate=0.5)
+    rate.step(increase)
+    assert np.allclose(np.abs(rate.joints - start)[unclamped], 0.5 * ran_slow[unclamped], atol=1e-9)
+    assert Spider.restore(fast.state_dict()).motor_rate == 2.0
+    older = fast.state_dict()
+    del older["motor_rate"]                                # a world saved before the rate existed ran at 1
+    assert Spider.restore(older).motor_rate == 1.0
+    with pytest.raises(ValueError):
+        Spider(motor_rate=0.0)
