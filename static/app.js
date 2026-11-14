@@ -28,7 +28,10 @@ controls.enableDamping = true;
 controls.minPolarAngle = 1.15;                        // horizontal rotation only
 controls.maxPolarAngle = 1.15;
 controls.minDistance = 0.6;
-controls.maxDistance = 4;
+controls.maxDistance = 12;                            // far enough to see the whole arena, its rim 5 m from the centre
+// The fog begins beyond the spider at every distance, so zooming out shows the arena and not a haze.
+function fogFor(r) { scene.fog.near = r + 3; scene.fog.far = r + 11; }
+fogFor(camera.position.length());
 // The wheel zooms by the distance scrolled, in the page's own handler: OrbitControls r160
 // divides the wheel's delta by the device pixel ratio truncated to an integer, which is zero
 // under a browser zoom below 100% (and on any display reporting a ratio under 1), so that one
@@ -41,6 +44,7 @@ canvas.addEventListener('wheel', (e) => {
   const offset = camera.position.clone().sub(controls.target);
   const r = Math.min(controls.maxDistance, Math.max(controls.minDistance, offset.length() * k));
   camera.position.copy(controls.target).add(offset.setLength(r));
+  fogFor(r);
 }, { passive: false });
 
 const sky = new THREE.HemisphereLight(0xd9e6ff, 0x202830, 0.9);
@@ -53,6 +57,7 @@ sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.left = sun.shadow.camera.bottom = -3;
 sun.shadow.camera.right = sun.shadow.camera.top = 3;
 scene.add(sun);
+scene.add(sun.target);
 
 const GROUND_COLOUR = '#1b2230';                      // the page's own; the view panel changes it, for this browser only
 // The ground's height, the body's ground_height: 0 on the flat arena, the sum of the server's
@@ -84,10 +89,11 @@ function makeGrid(hex) {                              // the lines follow the gr
   if (grid) { scene.remove(grid); grid.geometry.dispose(); grid.material.dispose(); }
   const line = new THREE.Color(hex), axes = new THREE.Color(hex).lerp(new THREE.Color('#ffffff'), 0.12);
   const pos = [], col = [], STEP = 0.05;
-  for (let i = -20; i <= 20; i++) {
+  for (let i = -22; i <= 22; i++) {
     const c = i === 0 ? axes : line, u = i * 0.25;
-    for (let t = -5; t < 5 - 1e-9; t += STEP) {
+    for (let t = -5.5; t < 5.5 - 1e-9; t += STEP) {
       for (const [x0, y0, x1, y1] of [[t, u, t + STEP, u], [u, t, u, t + STEP]]) {
+        if (Math.hypot(x0, y0) > 5.5 || Math.hypot(x1, y1) > 5.5) continue;   // the grid ends with the ground disc
         pos.push(x0, y0, groundHeight(x0, y0) + 0.001, x1, y1, groundHeight(x1, y1) + 0.001);
         col.push(c.r, c.g, c.b, c.r, c.g, c.b);
       }
@@ -111,6 +117,124 @@ function drawArena(name, terrains) {                     // the ground, its grid
   makeGrid(gridHex);
 }
 drawArena('flat');
+
+// --- the surface: a meadow, gravel, or both, painted on the ground. How the world is drawn, not
+// its law: the body's contact and the reward are the same on every surface, the brain senses no
+// colour, and the choice lives in this browser only. Drawn on canvases here, nothing is loaded.
+const SURFACE_TILE = 0.5;                             // metres one tile covers
+function seeded(seed) {                               // a small deterministic generator, so a surface looks the same on every load
+  let s = seed >>> 0;
+  return () => { s = (s + 0x6d2b79f5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+function tileCanvas(size) { const c = document.createElement('canvas'); c.width = c.height = size; return c; }
+function wrapped(size, x, y, r, draw) {               // draws at a point and at its copies across the edges, so the tile repeats seamlessly
+  for (const dx of [-size, 0, size]) for (const dy of [-size, 0, size]) {
+    if (x + dx < -r || x + dx > size + r || y + dy < -r || y + dy > size + r) continue;
+    draw(x + dx, y + dy);
+  }
+}
+function meadowTile(size = 512) {
+  const colour = tileCanvas(size), height = tileCanvas(size), rnd = seeded(7);
+  const c = colour.getContext('2d'), h = height.getContext('2d');
+  c.fillStyle = '#2f4a1f'; c.fillRect(0, 0, size, size);
+  h.fillStyle = '#404040'; h.fillRect(0, 0, size, size);
+  for (let i = 0; i < 260; i++) {                     // soft patches of lighter and darker soil under the grass
+    const x = rnd() * size, y = rnd() * size, r = 10 + rnd() * 40, g = rnd() < 0.5 ? 'rgba(70,95,35,0.25)' : 'rgba(25,40,15,0.3)';
+    wrapped(size, x, y, r, (px, py) => { c.fillStyle = g; c.beginPath(); c.arc(px, py, r, 0, 2 * Math.PI); c.fill(); });
+  }
+  c.lineCap = h.lineCap = 'round';
+  for (let i = 0; i < 9000; i++) {                    // blades: short strokes leaning one way, lighter at the tip
+    const x = rnd() * size, y = rnd() * size, len = 4 + rnd() * 10, lean = -0.6 + rnd() * 1.2 - 1.57;
+    const ex = Math.cos(lean) * len, ey = Math.sin(lean) * len;
+    const l = 22 + rnd() * 22, hue = 78 + rnd() * 34, w = 0.8 + rnd() * 1.1;
+    wrapped(size, x, y, len, (px, py) => {
+      c.strokeStyle = `hsl(${hue},${45 + rnd() * 20}%,${l}%)`; c.lineWidth = w;
+      c.beginPath(); c.moveTo(px, py); c.lineTo(px + ex, py + ey); c.stroke();
+      const v = 90 + Math.round(rnd() * 120); h.strokeStyle = `rgb(${v},${v},${v})`; h.lineWidth = w;
+      h.beginPath(); h.moveTo(px, py); h.lineTo(px + ex, py + ey); h.stroke();
+    });
+  }
+  for (let i = 0; i < 40; i++) {                      // a few small flowers, white and yellow
+    const x = rnd() * size, y = rnd() * size, col = rnd() < 0.6 ? '#e8e4d0' : '#e2c43c';
+    wrapped(size, x, y, 3, (px, py) => { c.fillStyle = col; c.beginPath(); c.arc(px, py, 1.6, 0, 2 * Math.PI); c.fill(); });
+  }
+  return { colour, height };
+}
+function gravelTile(size = 512) {
+  const colour = tileCanvas(size), height = tileCanvas(size), rnd = seeded(11);
+  const c = colour.getContext('2d'), h = height.getContext('2d');
+  c.fillStyle = '#3a352e'; c.fillRect(0, 0, size, size);
+  h.fillStyle = '#202020'; h.fillRect(0, 0, size, size);
+  for (let i = 0; i < 2600; i++) {                    // stones: rounded, of greys and browns, lit from one side
+    const x = rnd() * size, y = rnd() * size, rx = 3 + rnd() * 9, ry = rx * (0.55 + rnd() * 0.45), rot = rnd() * Math.PI;
+    const base = 70 + rnd() * 90, warm = rnd() * 18;
+    const fill = `rgb(${base + warm},${base + warm * 0.6},${base})`, lit = `rgba(255,250,240,${0.12 + rnd() * 0.12})`;
+    const hv = 120 + Math.round(rnd() * 135);
+    wrapped(size, x, y, rx + 2, (px, py) => {
+      c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(px + 1.2, py + 1.6, rx, ry, rot, 0, 2 * Math.PI); c.fill();
+      c.fillStyle = fill; c.beginPath(); c.ellipse(px, py, rx, ry, rot, 0, 2 * Math.PI); c.fill();
+      c.fillStyle = lit; c.beginPath(); c.ellipse(px - rx * 0.25, py - ry * 0.3, rx * 0.5, ry * 0.45, rot, 0, 2 * Math.PI); c.fill();
+      const g = h.createRadialGradient(px, py, 0, px, py, rx);
+      g.addColorStop(0, `rgb(${hv},${hv},${hv})`); g.addColorStop(1, 'rgb(40,40,40)');
+      h.fillStyle = g; h.beginPath(); h.ellipse(px, py, rx, ry, rot, 0, 2 * Math.PI); h.fill();
+    });
+  }
+  return { colour, height };
+}
+// Meadow and gravel together: the whole disc on one canvas, gravel under a meadow cut by a
+// smooth mask of the same waves wherever it is drawn, so paths of gravel wind through the grass.
+function mixedDisc(meadow, gravel, per = 186) {
+  const span = 11, size = per * (span / SURFACE_TILE);   // whole tiles, so the disc's canvas repeats seamlessly every 11 m
+  const out = { colour: tileCanvas(size), height: tileCanvas(size) };
+  const M = 256, mask = tileCanvas(M), m = mask.getContext('2d'), img = m.createImageData(M, M);
+  for (let j = 0; j < M; j++) for (let i = 0; i < M; i++) {
+    const u = 2 * Math.PI * i / M, w = 2 * Math.PI * j / M;   // whole waves over the 11 m, so the mask repeats with the canvas
+    const v = Math.sin(2 * u + 0.4) + Math.sin(2 * w - 1.1) + 0.8 * Math.sin(u + w + 2.0) + 0.6 * Math.sin(4 * u - 3 * w);
+    const a = Math.max(0, Math.min(1, (v + 0.35) / 0.5));   // meadow where the sum is high, a soft edge of a few centimetres
+    img.data[(j * M + i) * 4 + 3] = Math.round(255 * a);
+  }
+  m.putImageData(img, 0, 0);
+  for (const key of ['colour', 'height']) {
+    const ctx = out[key].getContext('2d'), layer = tileCanvas(size), l = layer.getContext('2d');
+    const paint = (target, src) => { const p = target.createPattern(src[key], 'repeat'); p.setTransform(new DOMMatrix().scale(per / src[key].width)); target.fillStyle = p; target.fillRect(0, 0, size, size); };
+    paint(ctx, gravel);
+    paint(l, meadow);
+    l.globalCompositeOperation = 'destination-in'; l.imageSmoothingEnabled = true; l.drawImage(mask, 0, 0, size, size);
+    ctx.drawImage(layer, 0, 0);
+  }
+  return out;
+}
+const surfaces = {};                                   // built on first use, then kept
+function surfaceMaps(name) {
+  if (surfaces[name]) return surfaces[name];
+  const made = name === 'meadow' ? meadowTile() : name === 'gravel' ? gravelTile()
+    : mixedDisc(surfaceMaps('meadow').source, surfaceMaps('gravel').source);
+  const repeat = name === 'mixed' ? 1 : 11 / SURFACE_TILE;   // the ring's uv spans its 11 m diameter once
+  const texture = (canvas, colour) => {
+    const t = new THREE.CanvasTexture(canvas);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.repeat.set(repeat, repeat);
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    if (colour) t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  };
+  return (surfaces[name] = { source: made, map: texture(made.colour, true), bump: texture(made.height, false) });
+}
+let surfaceName = 'plain', groundHex = GROUND_COLOUR;
+function setSurface(name) {
+  surfaceName = name;
+  const mat = ground.material;
+  if (name === 'plain') { mat.map = null; mat.bumpMap = null; mat.color.set(groundHex); }
+  else {
+    const s = surfaceMaps(name);
+    mat.map = s.map; mat.bumpMap = s.bump; mat.bumpScale = name === 'meadow' ? 1.2 : 2.5;
+    mat.color.set('#ffffff');
+  }
+  mat.needsUpdate = true;
+}
+let viewFollows = true;                             // the view panel's choice: the camera follows the spider, or stays
+function setView(value) { viewFollows = value !== 'fixed'; }
+function setGroundColour(hex) { groundHex = hex; if (surfaceName === 'plain') ground.material.color.set(hex); }
 
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _yUp = new THREE.Vector3(0, 1, 0);
 function placeCylinder(mesh, a, b, radius) {
@@ -249,6 +373,7 @@ function draw(pose) {
     leg.foot.position.set(pose.x + c * fx - s * fy, pose.y + s * fx + c * fy, (pose.ground ? pose.ground[i] : 0) + 0.003);
   }
   const next = new THREE.Vector3(pose.x, pose.y, groundHeight(pose.x, pose.y) + 0.08);
+  if (!viewFollows && !firstFrame) next.copy(target);   // a fixed view: the camera stays where it is, the spider may walk out of it
   if (firstFrame || next.distanceTo(target) > 1.0) {   // a recentre: jump with the spider
     camera.position.sub(target).add(next);
     target.copy(next);
@@ -259,6 +384,8 @@ function draw(pose) {
     camera.position.add(target).sub(before);
   }
   controls.target.copy(target);
+  sun.position.set(target.x + 2, target.y - 3, target.z + 5);   // the shadow's box goes with the spider
+  sun.target.position.copy(target);
 }
 
 function resize() {
@@ -658,10 +785,12 @@ function connect() {
 }
 connect();
 
-// --- the world panel: the colours of the ground and the grid, how the world is drawn, not its law
+// --- the world panel: the surface and the colours of the ground and the grid, how the world is drawn, not its law
 // (the brain senses joints, feet and motion, never a colour; the choices live in this browser only)
 const VIEW = {
-  ground: { own: GROUND_COLOUR, field: 'ground-colour', paint: hex => ground.material.color.set(hex) },
+  ground: { own: GROUND_COLOUR, field: 'ground-colour', paint: hex => setGroundColour(hex) },
+  surface: { own: 'plain', field: 'surface', paint: name => setSurface(name) },
+  follow: { own: 'follows', field: 'follow', paint: value => setView(value) },
   grid: { own: GRID_COLOUR, field: 'grid-colour', paint: hex => makeGrid(hex) },
   light: { own: '1', field: 'light', paint: v => { sky.intensity = LIGHT.sky * Number(v); sun.intensity = LIGHT.sun * Number(v); } },
 };

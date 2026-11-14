@@ -60,7 +60,7 @@ and a computer without an NVIDIA card leaves it out and loses nothing. To contin
 `runs/` (gitignored; `spider.npz` and `spider.json`, or the stems a `--runs` names) into the
 new checkout before the first start: the server loads what it finds there and the sidecar's
 law outranks the flags. A life saved on CUDA loads on the CPU. The nursery's saves and
-summaries live wherever `--save` and `--json` put them and travel the same way. Drag to turn the world horizontally, use the wheel to zoom. The
+summaries live wherever `--save` and `--json` put them and travel the same way. Drag to turn the world horizontally, use the wheel to zoom, out to 12 m, where the whole arena is in view (the fog follows the distance). The
 panel shows the moment, the brain's mode (aroused or routine), forward distance, the speed with
 a bar under it (the mean forward speed of the last 1000 moments filled from the centre, 0.05 m/s
 each way, the last 100 moments' mean as a tick: the moment's own speed is a sample of the stride
@@ -88,7 +88,12 @@ Under it, "The world": first the arena, `flat`, `hills` or `steep` ([the hills](
 which is the world's law and not the page's: choosing one changes the ground under the living
 brain, a law change counted on the law line like the drift, and the page draws the ground,
 grid and rim on the server's terrain. The `slope pull` button beside `drift` switches the
-terrain's pull downhill on and off, a law change too. Then the colours of the ground disc and of the grid, the light on the body
+terrain's pull downhill on and off, a law change too. Then the surface, `plain`, a `meadow`, `gravel`, or
+`meadow & gravel` (winding gravel paths through grass), textures the page paints on its own canvases; the
+body's contact, the slope and the reward are the same on all four. Beside it, `view follows` keeps the
+camera on the spider (the page's own) and `view fixed` holds the whole view where it is, so the spider may walk
+out of the picture. Then the colours of the ground disc (under the plain
+surface) and of the grid, the light on the body
 and the ground (sky and sun together, 0.3× to 3× the page's own), with `default` for the page's
 own. These are how the world is drawn, not a law of it (the brain senses joints, feet and
 motion, never a colour or a light), and the choices are kept in the browser, not with the life.

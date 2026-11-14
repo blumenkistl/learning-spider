@@ -128,8 +128,21 @@
       </select>
     </div>
     <div class="buttons">
+      <label for="surface" class="k">surface</label>
+      <select id="surface" title="what the ground looks like: plain (in the ground colour), a meadow, gravel, or meadow and gravel together. Only how the world is drawn: the body's contact, the slope and the reward are the same on every surface, and the brain senses no colour; kept in this browser only">
+        <option value="plain">plain</option>
+        <option value="meadow">meadow</option>
+        <option value="gravel">gravel</option>
+        <option value="mixed">meadow & gravel</option>
+      </select>
+      <select id="follow" title="the camera: following the spider (the page's own), or fixed where it is now, so the spider may walk out of the picture; drag and the wheel still turn and zoom. How the world is drawn, not its law; kept in this browser only">
+        <option value="follows">view follows</option>
+        <option value="fixed">view fixed</option>
+      </select>
+    </div>
+    <div class="buttons">
       <label for="ground-colour" class="k">ground</label>
-      <input type="color" id="ground-colour" value="#1b2230" title="the colour of the ground disc; kept in this browser only">
+      <input type="color" id="ground-colour" value="#1b2230" title="the colour of the ground disc under the plain surface; kept in this browser only">
       <label for="grid-colour" class="k">grid</label>
       <input type="color" id="grid-colour" value="#262e3c" title="the colour of the grid lines (the two axes through the origin a shade lighter); kept in this browser only">
       <button id="view-default" title="back to the page's own colours and light">default</button>
