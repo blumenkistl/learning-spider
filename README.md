@@ -391,20 +391,20 @@ was chosen by that comparison.
 | Gene | Value | Origin |
 | --- | --- | --- |
 | inputs / motors | 152 / 48 (`slots=[3]*16`; 72, `[9]*8`, under `--layout leg`) | this body |
-| modules | 64, 32 | chosen here; the Robot Arena uses 48, 24 on 32 inputs |
-| working trace | amplitude 0.3, decay 0.1, scale 12 | Robot Arena founder |
-| efference | off | Robot Arena founder |
+| modules | 64, 32 | chosen here; the Spider Arena uses 48, 24 on 32 inputs |
+| working trace | amplitude 0.3, decay 0.1, scale 12 | Spider Arena founder |
+| efference | off | Spider Arena founder |
 | heard history | none (the brain hears this moment only) | 0.97.1's default without recall |
-| episodic memory | on, consolidation 0.05 | Robot Arena founder |
+| episodic memory | on, consolidation 0.05 | Spider Arena founder |
 | recall memory | off | chosen here (a 0.97.1 default, off for cost; measured in "The recall memory and the temperature") |
-| sensory scale | 4 | Robot Arena founder, unmeasured on 152 coded inputs |
-| lateral (motor inhibition) | −0.5 | Robot Arena founder |
-| temperature | 0.3 | Robot Arena founder |
-| actor eta / bias / lam / gamma / critic | 0.03 / 0.003 / 0.6 / 0.95 / 5 | Robot Arena founder |
+| sensory scale | 4 | Spider Arena founder, unmeasured on 152 coded inputs |
+| lateral (motor inhibition) | −0.5 | Spider Arena founder |
+| temperature | 0.3 | Spider Arena founder |
+| actor eta / bias / lam / gamma / critic | 0.03 / 0.003 / 0.6 / 0.95 / 5 | Spider Arena founder |
 | actor hold / entropy | off (`hold=none`) / 0 | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
 | maturity (scale, recovery) | off (10, 200,000) | cadence docs/reward.md, the library's founder values; measured in "The reward learner's options" |
 | observation code / learned code (fields) | off / off (none): the cortex reads the coded senses themselves | cadence docs/senses.md, the library's founder values; measured in "The observation codes" |
-| arousal | threshold 0.2, decay 0.9, tolerance 2, floor 0.1, fast 0.05, slow 0.005, heat 2, youth 300, value surprise 1, need 0.1 (0.05, the arena's, until 2026-11-13) | Robot Arena founder; the need raised on a reading of 2026-11-13 (a stand's income met 0.05 and calmed the brain; at 0.1 the lives kept walking and learning) |
+| arousal | threshold 0.2, decay 0.9, tolerance 2, floor 0.1, fast 0.05, slow 0.005, heat 2, youth 300, value surprise 1, need 0.1 (0.05, the arena's, until 2026-11-13) | Spider Arena founder; the need raised on a reading of 2026-11-13 (a stand's income met 0.05 and calmed the brain; at 0.1 the lives kept walking and learning) |
 
 328 neurons, 22,041 parameters. The motor cortex is read by a layout, composed into the
 brain at birth and kept for its life (`--layout`, `LAYOUT`): `joint`, the founder, sixteen
@@ -761,7 +761,7 @@ earn before any body can show a gait, and that a knee that can stroke was doing 
 hip has not learned to do. 3–5 ms a moment.
 
 **The rhythm genes.** Two genes give the brain a sense of its own timing without a controller:
-`efference_amplitude=3` (an efference copy of its last command, 48 neurons; the Robot Arena's
+`efference_amplitude=3` (an efference copy of its last command, 48 neurons; the Spider Arena's
 operating point has it at 0, this brain's founder too) and `history_decays=0,0.7,0.95` (three
 echoes of the senses at three decays, 456 neurons; the founder hears this moment only). Fresh
 brains, held foot, progress only, 30,000 moments, the same seeds; the progress-only row is the

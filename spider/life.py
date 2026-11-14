@@ -35,7 +35,7 @@ from .senses import DEFAULT as DEFAULT_SENSES, Senses
 PROGRESS_PAY = 40.0     # reward per metre forward: 0.4 a moment at the full stroke speed of 0.2 m/s;
                         # one planted stroke moment all but reaches the cap, so four pushing feet pay
                         # as one does; --pay-per-metre / PAY_PER_METRE set it (README, "The pay per metre")
-PROGRESS_CAP = 0.5      # the Robot Arena's cap, under the dopamine cap of 1.0
+PROGRESS_CAP = 0.5      # the Spider Arena's cap, under the dopamine cap of 1.0
 BACKWARD_PAY = 0.0      # the share of the pay per metre charged for a metre backward: 0 leaves backward
                         # free (the founder, README "The reward"), 1 charges it as forward pays;
                         # --backward-pay / BACKWARD_PAY set it (README, "The backward pay")

@@ -10,7 +10,7 @@ eight slots of nine, one per leg, each answer one of the nine pairs a leg's hip 
 take. The same sixteen commands reach the body either way; what differs is what the brain
 chooses and is credited for: a joint, or a leg (README, "A slot per leg").
 
-The founder genes are the Robot Arena nursery's operating point (cadence-demos,
+The founder genes are the Spider Arena nursery's operating point (cadence-demos,
 ``robot-arena/arena/brain.py``) translated to cadence-net 0.97.1 names, with two choices made
 here and not measured there: wider modules for the population-coded senses, and the recall
 memory off. Every value is a gene; ``compose(genes=...)`` overrides any of them.
@@ -80,7 +80,7 @@ def joint_commands(answer: Any, layout: str) -> list[int]:
     raise ValueError(f"layout must be one of {LAYOUTS}, not {layout!r}")
 
 FOUNDER: dict[str, Any] = {
-    # Robot Arena's founder (its nursery grids of 2026-10-08/09), copied:
+    # Spider Arena's founder (its nursery grids of 2026-10-08/09), copied:
     "trace_amplitude": 0.3,
     "trace_decay": 0.1,
     "trace_scale": 12.0,            # the trace read back at scale 12, as the arena's brains were raised
