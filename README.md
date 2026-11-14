@@ -1,5 +1,9 @@
 # Learning Spider
 
+![The page: the spider on the steep hills, on meadow and gravel, with the life's readings on the left and its brain on the right](screenshots/spider_meadow_gravel_steep.png)
+
+*The page at 437,615 moments of a life of seed 0 (genes `gamma=0.99 entropy=0.1 arousal.need=0.2`, target muscles, compass and ground senses) on the `steep` arena under a strict course, muscles ×3, the surface `meadow & gravel`. Its law changed 12 times, so it is a schedule.*
+
 A spider with a body, a head and eight legs of two joints each, commanded joint by joint by one
 continuing [Cadence](https://github.com/muellerberndt/cadence) brain, in a three-dimensional
 world drawn in your browser. Nobody tells it how to walk. The world pays it for forward
